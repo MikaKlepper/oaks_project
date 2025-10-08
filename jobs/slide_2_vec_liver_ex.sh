@@ -5,11 +5,13 @@
 #SBATCH --mem=30G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="l-uni"
-#SBATCH --output=/data/temporary/mika/logs/slurm-%j-l-uni.out
+#SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-uni.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3"
 #SBATCH --qos=high
 #SBATCH --requeue
+
+
 
 # === Environment setup ===
 export HF_TOKEN="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"
