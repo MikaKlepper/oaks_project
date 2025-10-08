@@ -1,0 +1,45 @@
+# configs/configs.yaml
+
+# This file contains configuration settings for the pipeline.
+# It is structured in YAML format for easy readability and modification.
+
+
+# data paths and settings
+# configs/config.yaml
+data:
+  root: /data/temporary/mika/repos/splitting_data
+  metadata_csv: /data/pa_cpgarchive/archives/toxicology/open-tg-gates/metadata_SD/open_tggates_master_list.csv
+  organ: Liver
+
+datasets:
+  use_subset: true    # if true → use subset csv, otherwise full train/val/test
+  train: /data/temporary/mika/repos/splitting_data/Splits/train.csv
+  val:   /data/temporary/mika/repos/splitting_data/Splits/val.csv
+  test:  /data/temporary/mika/repos/splitting_data/Splits/test.csv
+  subset: /home/mikaklepper/temporary/repos/slide_2_vec/liver_slide_full_paths_s2v.csv
+  subset_fraction:  null  # only applied if use_subset=true
+
+features:
+  slide_dir: /data/temporary/toxicology/TG-GATES/liver/UNI/UNI/features
+  animal_dir: /data/temporary/toxicology/TG-GATES/liver/UNI/UNI/animal_features
+
+train:
+  batch_size: 8
+  epochs: 5
+  lr: 0.001
+  hidden_dim: 256
+  in_dim: 1024
+  optimizer: Adam              # choices: Adam, SGD, RMSprop
+  loss: BCE                    # choices: BCE, MSE, CE
+
+splitting:
+  num_repeats: 1000
+  partitions_train_val_test: /data/temporary/mika/repos/splitting_data/Partitions_train_val_test
+  partitions_train_val: /data/temporary/mika/repos/splitting_data/Partitions_train_val
+  summary_csv: /data/temporary/mika/repos/splitting_data/Splits/split_summary.csv
+
+subset_creation:
+  enabled: false           # set to true OR use --subset flag
+  target_split: val       # or "train" if you want a balanced training subset
+  output_dir: /data/temporary/mika/repos/splitting_data/Subsets
+
