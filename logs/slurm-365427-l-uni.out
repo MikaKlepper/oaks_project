@@ -1,0 +1,5 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+vscode://vscode-remote/ssh-remote+mikaklepper@dlc-meowth:8692/home/mikaklepper?ssh=/Users/mikaklepper/.ssh/id_ed25519
+Started SSH on port 8692
+slurmstepd: error: *** JOB 365427 ON dlc-meowth CANCELLED AT 2025-10-01T09:16:08 ***

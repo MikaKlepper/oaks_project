@@ -1,0 +1,6 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+vscode://vscode-remote/ssh-remote+mikaklepper@dlc-tornadus:8692/home/mikaklepper?ssh=/Users/mikaklepper/.ssh/id_ed25519
+Started SSH on port 8692
+slurmstepd: error: *** JOB 365048 ON dlc-tornadus CANCELLED AT 2025-09-29T16:46:46 ***
+slurmstepd: error: pyxis: child 392162 terminated with signal 9

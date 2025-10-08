@@ -1,0 +1,9 @@
+pyxis: importing docker image: docker://dockerdex.umcn.nl:5005/clemsgrs/slide2vec:v1.2.3
+slurmstepd: error: pyxis: child 1598622 failed with error code: 1
+slurmstepd: error: pyxis: failed to import docker image
+slurmstepd: error: pyxis: printing enroot log file:
+slurmstepd: error: pyxis:     [ERROR] Invalid image reference: docker://dockerdex.umcn.nl:5005/clemsgrs/slide2vec:v1.2.3
+slurmstepd: error: pyxis: couldn't start container
+slurmstepd: error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
+slurmstepd: error: Failed to invoke spank plugin stack
+slurmstepd: error: pyxis: child 1598646 failed with error code: 1

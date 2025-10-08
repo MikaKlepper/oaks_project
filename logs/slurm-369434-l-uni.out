@@ -1,0 +1,57 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+Installing dependencies...
+Looking in indexes: https://pypi.org/simple, https://download.pytorch.org/whl/cu113
+Collecting torch==1.12.1+cu113
+  Downloading https://download.pytorch.org/whl/cu113/torch-1.12.1%2Bcu113-cp310-cp310-linux_x86_64.whl (1837.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 GB 445.7 MB/s  0:00:04
+Collecting torchvision==0.13.1+cu113
+  Downloading https://download.pytorch.org/whl/cu113/torchvision-0.13.1%2Bcu113-cp310-cp310-linux_x86_64.whl (23.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 23.4/23.4 MB 418.2 MB/s  0:00:00
+Collecting torchaudio==0.12.1
+  Downloading https://download.pytorch.org/whl/cu113/torchaudio-0.12.1%2Bcu113-cp310-cp310-linux_x86_64.whl (3.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.8/3.8 MB 281.7 MB/s  0:00:00
+Requirement already satisfied: typing-extensions in /usr/local/lib/python3.10/dist-packages (from torch==1.12.1+cu113) (4.15.0)
+Requirement already satisfied: numpy in /usr/local/lib/python3.10/dist-packages (from torchvision==0.13.1+cu113) (1.26.4)
+Requirement already satisfied: requests in /usr/local/lib/python3.10/dist-packages (from torchvision==0.13.1+cu113) (2.32.5)
+Requirement already satisfied: pillow!=8.3.*,>=5.3.0 in /usr/local/lib/python3.10/dist-packages (from torchvision==0.13.1+cu113) (11.3.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (3.4.3)
+Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (3.10)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (2025.8.3)
+Installing collected packages: torch, torchvision, torchaudio
+  Attempting uninstall: torch
+    Found existing installation: torch 2.8.0
+    Uninstalling torch-2.8.0:
+      Successfully uninstalled torch-2.8.0
+  Attempting uninstall: torchvision
+    Found existing installation: torchvision 0.23.0
+    Uninstalling torchvision-0.23.0:
+      Successfully uninstalled torchvision-0.23.0
+
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+xformers 0.0.32.post2 requires torch==2.8.0, but you have torch 1.12.1+cu113 which is incompatible.
+Successfully installed torch-1.12.1+cu113 torchaudio-0.12.1+cu113 torchvision-0.13.1+cu113
+Requirement already satisfied: openslide-python in /usr/local/lib/python3.10/dist-packages (1.4.2)
+Collecting openslide-bin
+  Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl.metadata (4.5 kB)
+Requirement already satisfied: Pillow in /usr/local/lib/python3.10/dist-packages (from openslide-python) (11.3.0)
+Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl (4.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 118.2 MB/s  0:00:00
+Installing collected packages: openslide-bin
+Successfully installed openslide-bin-4.0.0.8
+------------------------------------------------------------
+To connect from VSCode, paste this in your browser:
+vscode://vscode-remote/ssh-remote+mikaklepper@dlc-mewtwo:8693/home/mikaklepper?ssh=/Users/mikaklepper/.ssh/id_ed25519
+------------------------------------------------------------
+Starting SSH on port 8693...
+Running Slide2Vec with config: /home/mikaklepper/temporary/repos/slide_2_vec/liver_uni.yaml
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/data/temporary/mika/repos/slide_2_vec/slide2vec/main.py", line 186, in <module>
+    torchvision.disable_beta_transforms_warning()
+AttributeError: module 'torchvision' has no attribute 'disable_beta_transforms_warning'
+Slide2Vec job completed.

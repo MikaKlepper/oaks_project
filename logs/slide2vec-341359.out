@@ -1,0 +1,4 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/unicorn_baseline:v1.4.3-titan
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/unicorn_baseline:v1.4.3-titan
+🚀 Starting interactive container on dlc-arceus...
+/var/spool/slurm/d/job341359/slurm_script: line 24: srun: command not found
