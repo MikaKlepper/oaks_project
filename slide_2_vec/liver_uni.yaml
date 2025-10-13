@@ -1,9 +1,10 @@
-# csv: "/data/temporary/mika/repos/slide_2_vec/liver_slide_full_paths_s2v.csv" # path to a csv file containing two columns: "slide" with the full path to each slide, and "label" with the associated label (optional)
-csv: "/data/temporary/mika/repos/splitting_data/Subsets/val_balanced_subset_paths.csv"
-# output_dir: "/data/temporary/mika/outputs_slide_2_vec/uni_output" # output directory
-output_dir: "/data/temporary/toxicology/TG-GATES/liver/UNI"
+csv: "/data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths_s2v.csv" 
+# csv: "/data/temporary/mika/repos/splitting_data/Subsets/val_balanced_subset_paths.csv"
+output_dir: "/data/temporary/mika/outputs_slide_2_vec/uni_output" # output directory
+# output_dir: "/data/temporary/toxicology/TG-GATES/liver/UNI"
 resume: true # resume from a previous run
-resume_dirname:  "/data/temporary/toxicology/TG-GATES/liver/UNI" # directory name to resume from
+# resume_dirname:  "/data/temporary/toxicology/TG-GATES/liver/UNI" # directory name to resume from
+resume_dirname: "/data/temporary/mika/outputs_slide_2_vec/uni_output"
 
 visualize: true # save a visualization of slide tiling in a .jpg
 

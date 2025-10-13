@@ -1,0 +1,147 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+🔧 Using Mika's local Slide2Vec repository
+=== DEBUG: Which Slide2Vec will Python use? ===
+Python executable: /usr/bin/python3
+Search path order:
+ - 
+ - /data/temporary/mika/repos/oaks_project/slide_2_vec
+ - /usr/lib/python310.zip
+ - /usr/lib/python3.10
+ - /usr/lib/python3.10/lib-dynload
+ - /usr/local/lib/python3.10/dist-packages
+ - /opt/ASAP/bin
+ - /usr/lib/python3/dist-packages
+
+slide2vec imported from: /data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/__init__.py
+Default config exists: True -> /data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/configs/default.yaml
+Running Slide2Vec from your local repo with config: liver_uni.yaml
+I20251013 07:52:43 2561010 slide2vec config.py:64] git:
+  sha: cef031dd45a011f166ca0c8b8f827d7d1ddfad6f, status: has uncommitted changes, branch: main
+
+I20251013 07:52:43 2561010 slide2vec config.py:20] csv: /data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths_s2v.csv
+output_dir: /data/temporary/mika/outputs_slide_2_vec/uni_output
+resume: true
+resume_dirname: /data/temporary/mika/outputs_slide_2_vec/uni_output
+visualize: true
+seed: 0
+tiling:
+  read_coordinates_from: null
+  backend: openslide
+  params:
+    spacing: 0.5
+    tolerance: 0.05
+    tile_size: 256
+    overlap: 0.0
+    min_tissue_percentage: 0.01
+    drop_holes: false
+    use_padding: true
+    tissue_thresh: 0.01
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+  seg_params:
+    downsample: 64
+    sthresh: 8
+    sthresh_up: 255
+    mthresh: 7
+    close: 12
+    use_otsu: true
+    tissue_pixel_value: 1
+  filter_params:
+    ref_tile_size: 16
+    a_t: 4
+    a_h: 2
+    max_n_holes: 8
+  visu_params:
+    downsample: 32
+  spacing: 0.5
+  tile_size: 224
+  tissue_pixel_value: 1
+  downsample: 64
+model:
+  level: tile
+  name: uni
+  mode: cls
+  arch: null
+  pretrained_weights: null
+  batch_size: 1
+  tile_size: 224
+  patch_size: 224
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+wandb:
+  enable: false
+  project: liver_feature_extraction
+  username: mikaklepper10
+  exp_name: uni
+  tags:
+  - features
+  - tile
+  - 224
+  dir: /home/mikaklepper/wandb
+  group: null
+  resume_id: /data/temporary/mika/outputs_slide_2_vec/uni_output
+
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+W20251013 07:52:43 2561010 huggingface_hub._login _login.py:415] Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running tiling.py...
+=+==+==+==+==+==+==+==+==+==+=
+All slides have been tiled. Skipping tiling step.
+=+==+==+==+==+==+==+==+==+==+=
+Tiling completed.
+=+==+==+==+==+==+==+==+==+==+=
+Running embed.py...
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:38: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:14: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:44: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+Traceback (most recent call last):
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/embed.py", line 19, in <module>
+    from slide2vec.models import ModelFactory
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/__init__.py", line 1, in <module>
+    from .models import ModelFactory
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/models.py", line 18, in <module>
+    from slide2vec.data.augmentations import make_normalize_transform, MaybeToTensor
+ModuleNotFoundError: No module named 'slide2vec.data'
+E1013 07:52:57.004000 2561403 torch/distributed/elastic/multiprocessing/api.py:874] failed (exitcode: 1) local_rank: 0 (pid: 2561477) of binary: /usr/bin/python3
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/run.py", line 905, in <module>
+    main()
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 357, in wrapper
+    return f(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/run.py", line 901, in main
+    run(args)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/run.py", line 892, in run
+    elastic_launch(
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/launcher/api.py", line 143, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/launcher/api.py", line 277, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError:
+============================================================
+slide2vec/embed.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-10-13_07:52:57
+  host      : dlc-arceus
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 2561477)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
+Feature extraction failed. Exiting.
+✅ Slide2Vec job completed (local repo version).

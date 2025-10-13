@@ -1,0 +1,107 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+Installing openslide...
+Requirement already satisfied: openslide-python in /usr/local/lib/python3.10/dist-packages (1.4.2)
+Collecting openslide-bin
+  Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl.metadata (4.5 kB)
+Requirement already satisfied: Pillow in /usr/local/lib/python3.10/dist-packages (from openslide-python) (11.3.0)
+Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl (4.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 167.5 MB/s  0:00:00
+Installing collected packages: openslide-bin
+Successfully installed openslide-bin-4.0.0.8
+Logging in to Hugging Face...
+[33m⚠️  Warning: 'huggingface-cli login' is deprecated. Use 'hf auth login' instead.[0m
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+Token is valid (permission: fineGrained).
+The token `UNI` has been saved to /tmp/stored_tokens
+Your token has been saved to /tmp/token
+Login successful.
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running Slide2Vec with config: liver_uni.yaml
+I20251013 07:24:46 2679688 slide2vec config.py:64] git:
+  sha: cef031dd45a011f166ca0c8b8f827d7d1ddfad6f, status: has uncommitted changes, branch: main
+
+I20251013 07:24:46 2679688 slide2vec config.py:20] csv: /data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths_s2v.csv
+output_dir: /data/temporary/mika/outputs_slide_2_vec/uni_output
+resume: true
+resume_dirname: /data/temporary/mika/outputs_slide_2_vec/uni_output
+visualize: true
+seed: 0
+tiling:
+  read_coordinates_from: null
+  backend: openslide
+  params:
+    spacing: 0.5
+    tolerance: 0.05
+    tile_size: 256
+    overlap: 0.0
+    min_tissue_percentage: 0.01
+    drop_holes: false
+    use_padding: true
+    tissue_thresh: 0.01
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+  seg_params:
+    downsample: 64
+    sthresh: 8
+    sthresh_up: 255
+    mthresh: 7
+    close: 12
+    use_otsu: true
+    tissue_pixel_value: 1
+  filter_params:
+    ref_tile_size: 16
+    a_t: 4
+    a_h: 2
+    max_n_holes: 8
+  visu_params:
+    downsample: 32
+  spacing: 0.5
+  tile_size: 224
+  tissue_pixel_value: 1
+  downsample: 64
+model:
+  level: tile
+  name: uni
+  mode: cls
+  arch: null
+  pretrained_weights: null
+  batch_size: 1
+  tile_size: 224
+  patch_size: 224
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+wandb:
+  enable: false
+  project: liver_feature_extraction
+  username: mikaklepper10
+  exp_name: uni
+  tags:
+  - features
+  - tile
+  - 224
+  dir: /home/mikaklepper/wandb
+  group: null
+  resume_id: /data/temporary/mika/outputs_slide_2_vec/uni_output
+
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+W20251013 07:24:47 2679688 huggingface_hub._login _login.py:415] Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running tiling.py...
+Traceback (most recent call last):
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/tiling.py", line 237, in <module>
+    from slide2vec.utils.config import get_cfg_from_file
+  File "/usr/local/lib/python3.10/dist-packages/slide2vec/utils/config.py", line 14, in <module>
+    from slide2vec.configs import default_config
+  File "/usr/local/lib/python3.10/dist-packages/slide2vec/configs/__init__.py", line 11, in <module>
+    default_config = load_config("default")
+  File "/usr/local/lib/python3.10/dist-packages/slide2vec/configs/__init__.py", line 8, in load_config
+    return OmegaConf.load(pathlib.Path(__file__).parent.resolve() / config_filename)
+  File "/usr/local/lib/python3.10/dist-packages/omegaconf/omegaconf.py", line 189, in load
+    with io.open(os.path.abspath(file_), "r", encoding="utf-8") as f:
+FileNotFoundError: [Errno 2] No such file or directory: '/usr/local/lib/python3.10/dist-packages/slide2vec/configs/default.yaml'
+Slide tiling failed. Exiting.
+ Slide2Vec job completed.

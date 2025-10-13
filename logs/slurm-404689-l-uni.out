@@ -1,0 +1,3 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+slurmstepd: error: *** JOB 404689 ON dlc-tornadus CANCELLED AT 2025-10-09T09:41:44 ***
+slurmstepd: error: pyxis: child 2171830 failed with error code: 1

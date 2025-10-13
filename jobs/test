@@ -1,5 +1,0 @@
-srun --ntasks=1 --gpus=1 --cpus-per-task=24 --mem=30G --time=08:00:00 \
-     --qos=high \
-     --container-image=dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3 \
-     --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary \
-     --pty bash

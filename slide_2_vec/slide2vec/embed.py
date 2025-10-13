@@ -19,7 +19,9 @@ from slide2vec.utils.config import get_cfg_from_file, setup_distributed
 from slide2vec.models import ModelFactory
 from slide2vec.data import TileDataset, RegionUnfolding
 
-if hasattr(torchvision, "disable_beta_transforms_warning"): torchvision.disable_beta_transforms_warning()
+if hasattr(torchvision, "disable_beta_transforms_warning"):
+    torchvision.disable_beta_transforms_warning()
+
 
 
 def get_args_parser(add_help: bool = True):
@@ -257,6 +259,8 @@ def main(args):
 
             # update process_df
             if distributed.is_main_process():
+
+
                 status_info = feature_extraction_updates[str(wsi_fp)]
                 process_df.loc[
                     process_df["wsi_path"] == str(wsi_fp), "feature_status"
@@ -295,3 +299,9 @@ def main(args):
 if __name__ == "__main__":
     args = get_args_parser(add_help=True).parse_args()
     main(args)
+
+
+
+
+
+

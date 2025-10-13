@@ -11,19 +11,27 @@
 #SBATCH --qos=high
 #SBATCH --requeue
 
-
-
 # === Environment setup ===
 export HF_TOKEN="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"
 export HF_HOME="/tmp"
-export PYTHONPATH="/data/temporary/mika/repos/slide_2_vec:${PYTHONPATH}"
+export PYTHONPATH="/data/temporary/mika/repos/oaks_project/slide_2_vec:${PYTHONPATH}:$(pwd)"
 
-cd /data/temporary/mika/repos/slide_2_vec
+# === Go to correct working directory ===
+cd /data/temporary/mika/repos/oaks_project/slide_2_vec
 
-# === Ensure openslide is available (if not in container) ===
+# === Make sure Python can always find the local slide2vec package ===
+SITE_DIR=$(python3 -c "import site; print(site.getsitepackages()[0])")
+echo "/data/temporary/mika/repos/oaks_project/slide_2_vec" | tee "${SITE_DIR}/slide2vec_path.pth"
+echo "✅ Added slide2vec path to ${SITE_DIR}/slide2vec_path.pth"
+
+# === Verify path + import before running ===
+echo "=== DEBUG PYTHONPATH ==="
+python3 -c "import sys, os; print('Python executable:', sys.executable); print('Python path entries:'); [print(' -', p) for p in sys.path]; print('Current directory:', os.getcwd())"
+python3 -c "import slide2vec; print('✅ slide2vec imported from:', slide2vec.__file__)"
+
+# === Ensure openslide is available ===
 echo "Installing openslide..."
 pip install --no-cache-dir openslide-python openslide-bin
-
 
 # === Install CUDA 11 compatible PyTorch stack ===
 echo "Installing CUDA 11 compatible PyTorch stack for GTX 1080 Ti..."
@@ -33,18 +41,13 @@ pip install --no-cache-dir torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchau
 # === Remove incompatible xFormers (built for PyTorch 2.8) ===
 pip uninstall -y xformers >/dev/null 2>&1 || true
 
-
-sed -i 's/torchvision.disable_beta_transforms_warning()/if hasattr(torchvision, "disable_beta_transforms_warning"): torchvision.disable_beta_transforms_warning()/' /data/temporary/mika/repos/slide_2_vec/slide2vec/embed.py
-
-
 # === Hugging Face login (non-interactive) ===
 echo "Logging in to Hugging Face..."
 huggingface-cli login --token "$HF_TOKEN"
 
 # === Run Slide2Vec job ===
-CONFIG_PATH="/home/mikaklepper/temporary/repos/slide_2_vec/liver_uni.yaml"
+CONFIG_PATH="/data/temporary/mika/repos/oaks_project/slide_2_vec/liver_uni.yaml"
 echo "Running Slide2Vec with config: ${CONFIG_PATH}"
 python3 -m slide2vec.main --config-file "${CONFIG_PATH}"
 
-echo " Slide2Vec job completed."
-
+echo "Slide2Vec job completed."

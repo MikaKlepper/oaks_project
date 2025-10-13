@@ -16,7 +16,7 @@ export HF_TOKEN=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
 export HF_HOME=/tmp
 export PYTHONPATH="${PYTHONPATH}:/data/temporary/mika/repos/slide_2_vec"
 
-cd /data/temporary/mika/repos/slide_2_vec 
+cd /data/temporary/mika/repos/oaks_project/slide_2_vec 
 
 PORT=8693
 NODE=$(hostname)

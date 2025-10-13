@@ -1,0 +1,22 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+Installing openslide...
+Requirement already satisfied: openslide-python in /usr/local/lib/python3.10/dist-packages (1.4.2)
+Collecting openslide-bin
+  Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl.metadata (4.5 kB)
+Requirement already satisfied: Pillow in /usr/local/lib/python3.10/dist-packages (from openslide-python) (11.3.0)
+Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl (4.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 12.9 MB/s  0:00:00
+Installing collected packages: openslide-bin
+Successfully installed openslide-bin-4.0.0.8
+Logging in to Hugging Face...
+[33m⚠️  Warning: 'huggingface-cli login' is deprecated. Use 'hf auth login' instead.[0m
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+Token is valid (permission: fineGrained).
+The token `UNI` has been saved to /tmp/stored_tokens
+Your token has been saved to /tmp/token
+Login successful.
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running Slide2Vec with config: liver_uni.yaml
+/var/spool/slurm/d/job405079/slurm_script: line 27: slide2vec: command not found
+ Slide2Vec job completed.

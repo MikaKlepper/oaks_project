@@ -1,0 +1,114 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+🔧 Using Mika's local Slide2Vec repository
+=== DEBUG: Which Slide2Vec will Python use? ===
+Python executable: /usr/bin/python3
+Search path order:
+ - 
+ - /data/temporary/mika/repos/oaks_project/slide_2_vec
+ - /usr/lib/python310.zip
+ - /usr/lib/python3.10
+ - /usr/lib/python3.10/lib-dynload
+ - /usr/local/lib/python3.10/dist-packages
+ - /opt/ASAP/bin
+ - /usr/lib/python3/dist-packages
+
+slide2vec imported from: /data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/__init__.py
+Default config exists: True -> /data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/configs/default.yaml
+Running Slide2Vec from your local repo with config: liver_uni.yaml
+I20251013 08:23:26 2275411 slide2vec config.py:64] git:
+  sha: cef031dd45a011f166ca0c8b8f827d7d1ddfad6f, status: has uncommitted changes, branch: main
+
+I20251013 08:23:26 2275411 slide2vec config.py:20] csv: /data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths_s2v.csv
+output_dir: /data/temporary/mika/outputs_slide_2_vec/uni_output
+resume: true
+resume_dirname: /data/temporary/mika/outputs_slide_2_vec/uni_output
+visualize: true
+seed: 0
+tiling:
+  read_coordinates_from: null
+  backend: openslide
+  params:
+    spacing: 0.5
+    tolerance: 0.05
+    tile_size: 256
+    overlap: 0.0
+    min_tissue_percentage: 0.01
+    drop_holes: false
+    use_padding: true
+    tissue_thresh: 0.01
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+  seg_params:
+    downsample: 64
+    sthresh: 8
+    sthresh_up: 255
+    mthresh: 7
+    close: 12
+    use_otsu: true
+    tissue_pixel_value: 1
+  filter_params:
+    ref_tile_size: 16
+    a_t: 4
+    a_h: 2
+    max_n_holes: 8
+  visu_params:
+    downsample: 32
+  spacing: 0.5
+  tile_size: 224
+  tissue_pixel_value: 1
+  downsample: 64
+model:
+  level: tile
+  name: uni
+  mode: cls
+  arch: null
+  pretrained_weights: null
+  batch_size: 1
+  tile_size: 224
+  patch_size: 224
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+wandb:
+  enable: false
+  project: liver_feature_extraction
+  username: mikaklepper10
+  exp_name: uni
+  tags:
+  - features
+  - tile
+  - 224
+  dir: /home/mikaklepper/wandb
+  group: null
+  resume_id: /data/temporary/mika/outputs_slide_2_vec/uni_output
+
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+W20251013 08:23:27 2275411 huggingface_hub._login _login.py:415] Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running tiling.py...
+=+==+==+==+==+==+==+==+==+==+=
+All slides have been tiled. Skipping tiling step.
+=+==+==+==+==+==+==+==+==+==+=
+Tiling completed.
+=+==+==+==+==+==+==+==+==+==+=
+Running embed.py...
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:38: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:14: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:44: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+[rank0]:[W1013 08:23:43.591719178 ProcessGroupNCCL.cpp:5023] [PG ID 0 PG GUID 0 Rank 0]  using GPU 0 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+=+==+==+==+==+==+==+==+==+==+=
+All slides have been embedded. Skipping tile-level feature extraction step.
+=+==+==+==+==+==+==+==+==+==+=
+Feature extraction completed.
+=+==+==+==+==+==+==+==+==+==+=
+All tasks finished successfully.
+=+==+==+==+==+==+==+==+==+==+=
+✅ Slide2Vec job completed (local repo version).

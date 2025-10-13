@@ -1,0 +1,3 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+slurmstepd: error: *** JOB 405121 ON dlc-meowth CANCELLED AT 2025-10-13T08:20:03 ***
+slurmstepd: error: pyxis: child 2123882 failed with error code: 1

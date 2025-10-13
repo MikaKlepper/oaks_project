@@ -1,0 +1,6 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+/var/spool/slurm/d/job404665/slurm_script: line 19: cd: /data/temporary/mika/repos/slide_2_vec: No such file or directory
+vscode://vscode-remote/ssh-remote+mikaklepper@dlc-moltres:8693/home/mikaklepper?ssh=/Users/mikaklepper/.ssh/id_ed25519
+Started SSH on port 8693
+slurmstepd: error: *** JOB 404665 ON dlc-moltres CANCELLED AT 2025-10-09T09:04:01 ***

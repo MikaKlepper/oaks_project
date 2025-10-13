@@ -1,0 +1,183 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+Installing openslide...
+Requirement already satisfied: openslide-python in /usr/local/lib/python3.10/dist-packages (1.4.2)
+Collecting openslide-bin
+  Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl.metadata (4.5 kB)
+Requirement already satisfied: Pillow in /usr/local/lib/python3.10/dist-packages (from openslide-python) (11.3.0)
+Downloading openslide_bin-4.0.0.8-py3-none-manylinux_2_28_x86_64.whl (4.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 33.7 MB/s  0:00:00
+Installing collected packages: openslide-bin
+Successfully installed openslide-bin-4.0.0.8
+Installing CUDA 11 compatible PyTorch stack for GTX 1080 Ti...
+Looking in indexes: https://pypi.org/simple, https://download.pytorch.org/whl/cu113
+Collecting torch==1.12.1+cu113
+  Downloading https://download.pytorch.org/whl/cu113/torch-1.12.1%2Bcu113-cp310-cp310-linux_x86_64.whl (1837.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 GB 326.4 MB/s  0:00:05
+Collecting torchvision==0.13.1+cu113
+  Downloading https://download.pytorch.org/whl/cu113/torchvision-0.13.1%2Bcu113-cp310-cp310-linux_x86_64.whl (23.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 23.4/23.4 MB 242.4 MB/s  0:00:00
+Collecting torchaudio==0.12.1
+  Downloading https://download.pytorch.org/whl/cu113/torchaudio-0.12.1%2Bcu113-cp310-cp310-linux_x86_64.whl (3.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.8/3.8 MB 187.6 MB/s  0:00:00
+Requirement already satisfied: typing-extensions in /usr/local/lib/python3.10/dist-packages (from torch==1.12.1+cu113) (4.15.0)
+Requirement already satisfied: numpy in /usr/local/lib/python3.10/dist-packages (from torchvision==0.13.1+cu113) (1.26.4)
+Requirement already satisfied: requests in /usr/local/lib/python3.10/dist-packages (from torchvision==0.13.1+cu113) (2.32.5)
+Requirement already satisfied: pillow!=8.3.*,>=5.3.0 in /usr/local/lib/python3.10/dist-packages (from torchvision==0.13.1+cu113) (11.3.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (3.4.3)
+Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (3.10)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.10/dist-packages (from requests->torchvision==0.13.1+cu113) (2025.8.3)
+Installing collected packages: torch, torchvision, torchaudio
+  Attempting uninstall: torch
+    Found existing installation: torch 2.8.0
+    Uninstalling torch-2.8.0:
+      Successfully uninstalled torch-2.8.0
+  Attempting uninstall: torchvision
+    Found existing installation: torchvision 0.23.0
+    Uninstalling torchvision-0.23.0:
+      Successfully uninstalled torchvision-0.23.0
+
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+xformers 0.0.32.post2 requires torch==2.8.0, but you have torch 1.12.1+cu113 which is incompatible.
+Successfully installed torch-1.12.1+cu113 torchaudio-0.12.1+cu113 torchvision-0.13.1+cu113
+Logging in to Hugging Face...
+[33m⚠️  Warning: 'huggingface-cli login' is deprecated. Use 'hf auth login' instead.[0m
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+Token is valid (permission: fineGrained).
+The token `UNI` has been saved to /tmp/stored_tokens
+Your token has been saved to /tmp/token
+Login successful.
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running Slide2Vec with config: /home/mikaklepper/temporary/repos/oaks_project/slide_2_vec/liver_uni.yaml
+I20251009 12:06:06 3586228 slide2vec config.py:64] git:
+  sha: cef031dd45a011f166ca0c8b8f827d7d1ddfad6f, status: has uncommitted changes, branch: main
+
+I20251009 12:06:06 3586228 slide2vec config.py:20] csv: /data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths_s2v.csv
+output_dir: /data/temporary/mika/outputs_slide_2_vec/uni_output
+resume: true
+resume_dirname: /data/temporary/mika/outputs_slide_2_vec/uni_output
+visualize: true
+seed: 0
+tiling:
+  read_coordinates_from: null
+  backend: openslide
+  params:
+    spacing: 0.5
+    tolerance: 0.05
+    tile_size: 256
+    overlap: 0.0
+    min_tissue_percentage: 0.01
+    drop_holes: false
+    use_padding: true
+    tissue_thresh: 0.01
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+  seg_params:
+    downsample: 64
+    sthresh: 8
+    sthresh_up: 255
+    mthresh: 7
+    close: 12
+    use_otsu: true
+    tissue_pixel_value: 1
+  filter_params:
+    ref_tile_size: 16
+    a_t: 4
+    a_h: 2
+    max_n_holes: 8
+  visu_params:
+    downsample: 32
+  spacing: 0.5
+  tile_size: 224
+  tissue_pixel_value: 1
+  downsample: 64
+model:
+  level: tile
+  name: uni
+  mode: cls
+  arch: null
+  pretrained_weights: null
+  batch_size: 1
+  tile_size: 224
+  patch_size: 224
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+wandb:
+  enable: false
+  project: liver_feature_extraction
+  username: mikaklepper10
+  exp_name: uni
+  tags:
+  - features
+  - tile
+  - 224
+  dir: /home/mikaklepper/wandb
+  group: null
+  resume_id: /data/temporary/mika/outputs_slide_2_vec/uni_output
+
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+W20251009 12:06:06 3586228 huggingface_hub._login _login.py:415] Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running tiling.py...
+=+==+==+==+==+==+==+==+==+==+=
+All slides have been tiled. Skipping tiling step.
+=+==+==+==+==+==+==+==+==+==+=
+Tiling completed.
+=+==+==+==+==+==+==+==+==+==+=
+Running embed.py...
+Disabling PyTorch because PyTorch >= 2.1 is required but found 1.12.1+cu113
+None of PyTorch, TensorFlow >= 2.0, or Flax have been found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:46: UserWarning: xFormers is not available (SwiGLU)
+  warnings.warn("xFormers is not available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:20: UserWarning: xFormers is not available (Attention)
+  warnings.warn("xFormers is not available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:50: UserWarning: xFormers is not available (Block)
+  warnings.warn("xFormers is not available (Block)")
+Traceback (most recent call last):
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/embed.py", line 19, in <module>
+    from slide2vec.models import ModelFactory
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/__init__.py", line 1, in <module>
+    from .models import ModelFactory
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/models.py", line 18, in <module>
+    from slide2vec.data.augmentations import make_normalize_transform, MaybeToTensor
+ModuleNotFoundError: No module named 'slide2vec.data'
+ERROR:torch.distributed.elastic.multiprocessing.api:failed (exitcode: 1) local_rank: 0 (pid: 3587924) of binary: /usr/bin/python3
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/run.py", line 765, in <module>
+    main()
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
+    return f(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/run.py", line 761, in main
+    run(args)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/run.py", line 752, in run
+    elastic_launch(
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/launcher/api.py", line 131, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/launcher/api.py", line 245, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError:
+============================================================
+slide2vec/embed.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-10-09_12:06:15
+  host      : dlc-tornadus
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 3587924)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
+Feature extraction failed. Exiting.
+Slide2Vec job completed.

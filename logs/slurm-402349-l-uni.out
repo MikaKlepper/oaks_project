@@ -1,0 +1,19 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+slurmstepd: error: pyxis: child 285568 failed with error code: 255
+slurmstepd: error: pyxis: failed to import docker image
+slurmstepd: error: pyxis: printing enroot log file:
+slurmstepd: error: pyxis:     [INFO] Querying registry for permission grant
+slurmstepd: error: pyxis:     [INFO] Authenticating with user: <anonymous>
+slurmstepd: error: pyxis:     [INFO] Authentication succeeded
+slurmstepd: error: pyxis:     [INFO] Fetching image manifest list
+slurmstepd: error: pyxis:     [INFO] Fetching image manifest
+slurmstepd: error: pyxis:     [INFO] Found all layers in cache
+slurmstepd: error: pyxis:     [INFO] Extracting image layers...
+slurmstepd: error: pyxis:     parallel: Error: Output is incomplete.
+slurmstepd: error: pyxis:     parallel: Error: Cannot append to buffer file in /tmp.
+slurmstepd: error: pyxis:     parallel: Error: Is the disk full?
+slurmstepd: error: pyxis:     parallel: Error: Change $TMPDIR with --tmpdir or use --compress.
+slurmstepd: error: pyxis: couldn't start container
+slurmstepd: error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
+slurmstepd: error: Failed to invoke spank plugin stack
+slurmstepd: error: pyxis: child 287193 failed with error code: 1
