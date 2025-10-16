@@ -1,0 +1,4 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+pyxis: imported docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+/var/spool/slurm/d/job406759/slurm_script: line 22: unexpected EOF while looking for matching `}'
+/var/spool/slurm/d/job406759/slurm_script: line 26: syntax error: unexpected end of file

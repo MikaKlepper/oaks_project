@@ -1,0 +1,86 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+ Running Slide2Vec with config: liver_uni.yaml
+I20251013 11:10:38 3284599 slide2vec config.py:64] git:
+  sha: 59507a7546ee6eb693c5a4bf458ee43e629f7465, status: has uncommitted changes, branch: main
+
+I20251013 11:10:38 3284599 slide2vec config.py:20] csv: /data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv
+output_dir: /data/temporary/toxicology/TG-GATES/liver/UNI
+resume: true
+resume_dirname: /data/temporary/toxicology/TG-GATES/liver/UNI
+visualize: true
+seed: 0
+tiling:
+  read_coordinates_from: null
+  backend: openslide
+  params:
+    spacing: 0.5
+    tolerance: 0.05
+    tile_size: 256
+    overlap: 0.0
+    min_tissue_percentage: 0.01
+    drop_holes: false
+    use_padding: true
+    tissue_thresh: 0.01
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+  seg_params:
+    downsample: 64
+    sthresh: 8
+    sthresh_up: 255
+    mthresh: 7
+    close: 12
+    use_otsu: true
+    tissue_pixel_value: 1
+  filter_params:
+    ref_tile_size: 16
+    a_t: 4
+    a_h: 2
+    max_n_holes: 8
+  visu_params:
+    downsample: 32
+  spacing: 0.5
+  tile_size: 224
+  tissue_pixel_value: 1
+  downsample: 64
+model:
+  level: tile
+  name: uni
+  mode: cls
+  arch: null
+  pretrained_weights: null
+  batch_size: 1
+  tile_size: 224
+  patch_size: 224
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+wandb:
+  enable: false
+  project: liver_feature_extraction
+  username: mikaklepper10
+  exp_name: uni
+  tags:
+  - features
+  - tile
+  - 224
+  dir: /home/mikaklepper/wandb
+  group: null
+  resume_id: /data/temporary/toxicology/TG-GATES/liver/UNI
+
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+W20251013 11:10:38 3284599 huggingface_hub._login _login.py:415] Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running tiling.py...
+Traceback (most recent call last):
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/tiling.py", line 449, in <module>
+    main(args)
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/tiling.py", line 360, in main
+    wsi_paths, _ = load_csv(cfg)
+  File "/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/utils/utils.py", line 261, in load_csv
+    raise ValueError("CSV must contain either 'wsi_path' or 'slide_path' column")
+ValueError: CSV must contain either 'wsi_path' or 'slide_path' column
+Slide tiling failed. Exiting.
+ Slide2Vec job completed successfully.

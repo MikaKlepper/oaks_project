@@ -1,0 +1,130 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
+ Running Slide2Vec with config: liver_uni.yaml
+I20251013 15:42:18 1249695 slide2vec config.py:64] git:
+  sha: 59507a7546ee6eb693c5a4bf458ee43e629f7465, status: has uncommitted changes, branch: main
+
+I20251013 15:42:18 1249695 slide2vec config.py:20] csv: /data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths_s2v.csv
+output_dir: /data/temporary/mika/outputs_slide_2_vec/uni_output
+resume: true
+resume_dirname: /data/temporary/mika/outputs_slide_2_vec/uni_output
+visualize: true
+seed: 0
+tiling:
+  read_coordinates_from: null
+  backend: asap
+  params:
+    spacing: 0.5
+    tolerance: 0.05
+    tile_size: 256
+    overlap: 0.0
+    min_tissue_percentage: 0.01
+    drop_holes: false
+    use_padding: true
+    tissue_thresh: 0.01
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+  seg_params:
+    downsample: 64
+    sthresh: 8
+    sthresh_up: 255
+    mthresh: 7
+    close: 12
+    use_otsu: true
+    tissue_pixel_value: 1
+  filter_params:
+    ref_tile_size: 16
+    a_t: 4
+    a_h: 2
+    max_n_holes: 8
+  visu_params:
+    downsample: 32
+  spacing: 0.5
+  tile_size: 224
+  tissue_pixel_value: 1
+  downsample: 64
+model:
+  level: tile
+  name: uni
+  mode: cls
+  arch: null
+  pretrained_weights: null
+  batch_size: 1
+  tile_size: 224
+  patch_size: 224
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+wandb:
+  enable: false
+  project: liver_feature_extraction
+  username: mikaklepper10
+  exp_name: uni
+  tags:
+  - features
+  - tile
+  - 224
+  dir: /home/mikaklepper/wandb
+  group: null
+  resume_id: /data/temporary/mika/outputs_slide_2_vec/uni_output
+
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+W20251013 15:42:18 1249695 huggingface_hub._login _login.py:415] Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+Running tiling.py...
+=+==+==+==+==+==+==+==+==+==+=
+All slides have been tiled. Skipping tiling step.
+=+==+==+==+==+==+==+==+==+==+=
+Tiling completed.
+=+==+==+==+==+==+==+==+==+==+=
+Running embed.py...
+
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed.
+*****************************************
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:38: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:38: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:38: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:14: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/swiglu_ffn.py:38: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:14: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:14: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/attention.py:14: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:44: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:44: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:44: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+/data/temporary/mika/repos/oaks_project/slide_2_vec/slide2vec/models/layers/block.py:44: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+[rank1]:[W1013 15:42:32.803435857 ProcessGroupNCCL.cpp:5023] [PG ID 0 PG GUID 0 Rank 1]  using GPU 1 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+[rank0]:[W1013 15:42:32.963277325 ProcessGroupNCCL.cpp:5023] [PG ID 0 PG GUID 0 Rank 0]  using GPU 0 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+[rank3]:[W1013 15:42:32.976626195 ProcessGroupNCCL.cpp:5023] [PG ID 0 PG GUID 0 Rank 3]  using GPU 3 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user.
+  warnings.warn(  # warn only once
+[rank2]:[W1013 15:42:32.981887491 ProcessGroupNCCL.cpp:5023] [PG ID 0 PG GUID 0 Rank 2]  using GPU 2 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+=+==+==+==+==+==+==+==+==+==+=
+All slides have been embedded. Skipping tile-level feature extraction step.
+=+==+==+==+==+==+==+==+==+==+=
+Feature extraction completed.
+=+==+==+==+==+==+==+==+==+==+=
+All tasks finished successfully.
+=+==+==+==+==+==+==+==+==+==+=
+ Slide2Vec job completed successfully.

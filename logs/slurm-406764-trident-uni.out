@@ -1,0 +1,5 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+pyxis: imported docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+vscode://vscode-remote/ssh-remote+mikaklepper@dlc-lugia:8693/home/mikaklepper
+Started SSH on port 8693
+slurmstepd: error: *** JOB 406764 ON dlc-lugia CANCELLED AT 2025-10-16T09:31:23 ***

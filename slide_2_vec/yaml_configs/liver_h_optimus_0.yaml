@@ -1,0 +1,54 @@
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
+output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_0" # output directory
+resume: false # resume from a previous run
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_0" # directory name to resume from
+
+visualize: true # save a visualization of slide tiling in a .jpg
+
+seed: 0 # seed for reproducibility
+
+tiling:
+  read_coordinates_from: # path to a directory containing {wsi.stem}.npy files with tiles coordinates & associated metadata (leave empty to compute the coordinates)
+  spacing: 0.5 # may be 0.49 spacing at which to tile the slide, in microns per pixel
+  tile_size: 224 # size of the tiles to extract, in pixels
+  backend: "openslide" # backend to use for slide reading
+  tissue_pixel_value: 1 # value of tissue pixel in pre-computed segmentation masks
+  downsample: 64 # find the closest downsample in the slide for tissue segmentation
+  seg_params:
+    sthresh: 8 # segmentation threshold (positive integer, using a higher threshold leads to less foreground and more background detection) (not used when use_otsu=True)
+    mthresh: 7 # median filter size (positive, odd integer)
+    close: 12 # additional morphological closing to apply following initial thresholding (positive integer)
+    use_otsu: true # use otsu's method instead of simple binary thresholding
+  params:
+    overlap: 0.0 # percentage of overlap between two consecutive tiles (float between 0 and 1)
+    drop_holes: false # whether or not to drop tiles whose center pixel falls withing an identified holes
+    tissue_thresh: 0.01 # threshold used to filter out tiles that have less tissue than this value (percentage)
+    use_padding: true # whether to pad the border of the slide
+    ref_tile_size: 16 # reference tile size at spacing tiling.spacing
+    a_t: 10 # area filter threshold for tissue (positive integer, the minimum size of detected foreground contours to consider, relative to the reference tile size ref_tile_size, e.g. a value 10 means only detected foreground contours of size greater than 10 [ref_tile_size, ref_tile_size] tiles at spacing tiling.spacing will be kept)
+    a_h: 16 # area filter threshold for holes (positive integer, the minimum size of detected holes/cavities in foreground contours to avoid, once again relative to the reference tile size ref_tile_size)
+    max_n_holes: 8 # maximum of holes to consider per detected foreground contours (positive integer, higher values lead to more accurate patching but increase computational cost ; keeps the biggest holes)
+
+model:
+  level: "tile" # level at which to extract the features ("tile", "region" or "slide")
+  name: "h-optimus-0" # foundation model name ["uni", "virchow", "virchow2", "prov-gigapath", "h-optimus-0", "titan", "prism"] (leave empty when using a custom model)
+  arch: # architecture of custom model
+  pretrained_weights: # path to the pretrained weights when using a custom model
+  batch_size: 8
+  tile_size: ${tiling.tile_size}
+  patch_size: 224 # if level is "region", size used to unroll the region into patches
+
+speed:
+  fp16: false # use mixed precision during model inference
+  num_workers_tiling: 16 # number of workers for tiling slides
+  num_workers_embedding: 16 # number of workers for data loading when embedding slides
+
+wandb:
+  enable: false
+  project: "liver_feature_extraction" # wandb project name
+  username: "mikaklepper10" # wandb username
+  exp_name: "h-optimus-0" # wandb experiment name
+  tags: ["features", "${model.level}", "${tiling.tile_size}"] # wandb tags
+  dir: "/home/mikaklepper/wandb"
+  group:
+  resume_id: "${resume_dirname}"

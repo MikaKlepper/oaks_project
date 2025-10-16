@@ -1,0 +1,32 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+pyxis: imported docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+usage: run_batch_of_slides.py [-h] [--gpu GPU] [--task {seg,coords,feat,all}]
+                              --job_dir JOB_DIR [--skip_errors]
+                              [--max_workers MAX_WORKERS]
+                              [--batch_size BATCH_SIZE]
+                              [--wsi_cache WSI_CACHE]
+                              [--cache_batch_size CACHE_BATCH_SIZE]
+                              --wsi_dir WSI_DIR
+                              [--wsi_ext WSI_EXT [WSI_EXT ...]]
+                              [--custom_mpp_keys CUSTOM_MPP_KEYS [CUSTOM_MPP_KEYS ...]]
+                              [--custom_list_of_wsis CUSTOM_LIST_OF_WSIS]
+                              [--reader_type {openslide,image,cucim,sdpc}]
+                              [--search_nested] [--segmenter {hest,grandqc}]
+                              [--seg_conf_thresh SEG_CONF_THRESH]
+                              [--remove_holes] [--remove_artifacts]
+                              [--remove_penmarks]
+                              [--seg_batch_size SEG_BATCH_SIZE]
+                              [--mag {5,10,20,40,80}]
+                              [--patch_size PATCH_SIZE] [--overlap OVERLAP]
+                              [--min_tissue_proportion MIN_TISSUE_PROPORTION]
+                              [--coords_dir COORDS_DIR]
+                              [--patch_encoder {conch_v1,conch_v15,uni_v1,uni_v2,ctranspath,phikon,phikon_v2,resnet50,gigapath,virchow,virchow2,hoptimus0,hoptimus1,musk,hibou_l,kaiko-vitb8,kaiko-vitb16,kaiko-vits8,kaiko-vits16,kaiko-vitl14,lunit-vits8,midnight12k}]
+                              [--patch_encoder_ckpt_path PATCH_ENCODER_CKPT_PATH]
+                              [--slide_encoder {threads,titan,prism,chief,gigapath,madeleine,feather,abmil,mean-conch_v1,mean-conch_v15,mean-uni_v1,mean-uni_v2,mean-ctranspath,mean-phikon,mean-resnet50,mean-gigapath,mean-virchow,mean-virchow2,mean-hoptimus0,mean-phikon_v2,mean-musk,mean-hibou_l,mean-kaiko-vit8s,mean-kaiko-vit16s,mean-kaiko-vit8b,mean-kaiko-vit16b,mean-kaiko-vit14l}]
+                              [--feat_batch_size FEAT_BATCH_SIZE]
+run_batch_of_slides.py: error: the following arguments are required: --job_dir, --wsi_dir
+/var/spool/slurm/d/job406336/slurm_script: line 22: --wsi_dir: command not found
+/var/spool/slurm/d/job406336/slurm_script: line 26: --mag: command not found
+/var/spool/slurm/d/job406336/slurm_script: line 27: --patch_size: command not found
+/var/spool/slurm/d/job406336/slurm_script: line 28: --max_workers: command not found
+ Trident UNI feature extraction completed successfully.

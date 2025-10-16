@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-task=1
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=30G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="l-uni"
@@ -12,11 +12,11 @@
 #SBATCH --requeue
 
 
-export HF_TOKEN=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
-export HF_HOME=/tmp
-export PYTHONPATH="${PYTHONPATH}:/data/temporary/mika/repos/slide_2_vec"
+export HF_TOKEN="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"
+export HF_HOME="/tmp"
+export PYTHONPATH="/data/temporary/mika/repos/oaks_project/slide_2_vec:$PYTHONPATH"
 
-cd /data/temporary/mika/repos/oaks_project/slide_2_vec 
+cd /data/temporary/mika/repos/oaks_project/slide_2_vec
 
 PORT=8693
 NODE=$(hostname)

@@ -1,0 +1,29 @@
+pyxis: importing docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+pyxis: imported docker image: dockerdex.umcn.nl:5005#dnschouten/crossmodal-alignment:v1.0_trident
+🚀 Starting Trident UNI feature extraction...
+Traceback (most recent call last):
+  File "/home/user/trident/run_batch_of_slides.py", line 313, in <module>
+    main()
+    ~~~~^^
+  File "/home/user/trident/run_batch_of_slides.py", line 305, in main
+    processor = initialize_processor(args)
+  File "/home/user/trident/run_batch_of_slides.py", line 157, in initialize_processor
+    return Processor(
+        job_dir=args.job_dir,
+    ...<8 lines>...
+        search_nested=args.search_nested,
+    )
+  File "/home/user/trident/trident/Processor.py", line 121, in __init__
+    full_paths, rel_paths = collect_valid_slides(
+                            ~~~~~~~~~~~~~~~~~~~~^
+        wsi_dir=wsi_source,
+        ^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        return_relative_paths=True
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/user/trident/trident/IO.py", line 65, in collect_valid_slides
+    raise ValueError("CSV must contain a column named 'wsi'.")
+ValueError: CSV must contain a column named 'wsi'.
+✅ Trident UNI feature extraction completed successfully.
