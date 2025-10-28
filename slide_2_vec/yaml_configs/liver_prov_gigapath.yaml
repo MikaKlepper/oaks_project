@@ -1,8 +1,18 @@
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
-output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH" # output directory
+#csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
+#output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH" # output directory
 
-resume: false # resume from a previous run
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH" # directory name to resume from
+#resume: true # resume from a previous run
+#resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH" # directory name to resume from
+
+
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
+output_dir: "/scratch_mikaklepper_val/outputs/PROV_GIGAPATH"  # temporary scratch output directory
+
+resume: true  # resume from a previous run if outputs already exist
+# resume_dirname: "/scratch_mikaklepper_val/outputs/liver_prov_gigapath"  # scratch directory to resume from
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH"
+
+
 
 visualize: true # save a visualization of slide tiling in a .jpg
 
@@ -40,9 +50,9 @@ model:
   patch_size: 224 # if level is "region", size used to unroll the region into patches
 
 speed:
-  fp16: false # use mixed precision during model inference
+  fp16: true # use mixed precision during model inference
   num_workers_tiling: 16 # number of workers for tiling slides
-  num_workers_embedding: 16 # number of workers for data loading when embedding slides
+  num_workers_embedding: 8  # number of workers for data loading when embedding slides
 
 wandb:
   enable: false

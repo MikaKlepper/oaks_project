@@ -1,4 +1,0 @@
-pyxis: importing docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
-pyxis: imported docker image: dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.2.3
-vscode://vscode-remote/ssh-remote+mikaklepper@dlc-lugia:8693/home/mikaklepper?ssh=/Users/mikaklepper/.ssh/id_ed25519
-Started SSH on port 8693

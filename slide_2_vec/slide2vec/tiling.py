@@ -339,7 +339,7 @@ def process_slide(
 
     except Exception as e:
         print("=" * 60)
-        print(f"❌ Error while processing {wsi_path}")
+        print(f" Error while processing {wsi_path}")
         print(f"Error message: {e}")
         traceback.print_exc()   # <-- print full traceback to terminal
         print("=" * 60)

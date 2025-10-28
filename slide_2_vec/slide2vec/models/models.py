@@ -557,7 +557,14 @@ class TITAN(SlideFeatureExtractor):
 
     def forward_slide(self, tile_features, tile_coordinates, tile_size_lv0, **kwargs):
         tile_features = tile_features.unsqueeze(0)
+        tile_ccordinates = tile_coordinates.to(dtype=torch.long, device=tile_features.device)
         tile_coordinates = tile_coordinates.unsqueeze(0)
+
+        if not torch.is_floating_point(tile_features):
+            tile_features = tile_features.float()
+
+        tile_size_lv0 = int(tile_size_lv0)
+
         output = self.slide_encoder.encode_slide_from_patch_features(
             tile_features, tile_coordinates, tile_size_lv0
         )

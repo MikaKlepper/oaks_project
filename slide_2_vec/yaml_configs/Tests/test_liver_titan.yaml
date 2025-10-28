@@ -2,7 +2,7 @@ csv: "/data/temporary/mika/repos/oaks_project/slide_2_vec/liver_slide_full_paths
 # csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
 output_dir: "/data/temporary/toxicology/TG-GATES/liver/Test/TITAN" # output directory
 #output_dir: "/data/temporary/toxicology/TG-GATES/liver/UNI"
-resume: false # resume from a previous run
+resume: true # resume from a previous run
 resume_dirname:  "/data/temporary/toxicology/TG-GATES/liver/Test/TITAN" # directory name to resume from
 #resume_dirname: "/data/temporary/mika/outputs_slide_2_vec/uni_output"
 

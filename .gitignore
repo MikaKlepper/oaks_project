@@ -1,2 +1,22 @@
+# Existing rules
 logs/*.out
-logs/*.out
+
+# Ignore macOS system files
+.DS_Store
+
+# Ignore entire logs and WSI folders
+logs/
+wsis/
+
+# Outputs and temporary files
+outputs/
+outputs_FM/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Model and checkpoint files
+*.pth
+*.pt
+

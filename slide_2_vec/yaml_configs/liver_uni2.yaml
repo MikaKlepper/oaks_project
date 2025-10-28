@@ -1,6 +1,6 @@
 csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
 output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/UNI_2" # output directory
-resume: false # resume from a previous run
+resume: true # resume from a previous run
 resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/UNI_2" # directory name to resume from
 
 visualize: true # save a visualization of slide tiling in a .jpg
