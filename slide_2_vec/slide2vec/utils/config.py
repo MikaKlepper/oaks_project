@@ -32,7 +32,7 @@ def get_cfg_from_file(config_file):
     return cfg
 
 
-def setup(config_file):
+def setup(config_file, skip_datetime: bool = False):
     """
     Basic configuration setup without any distributed or GPU-specific initialization.
     This function:
@@ -45,8 +45,10 @@ def setup(config_file):
 
     if cfg.resume:
         run_id = cfg.resume_dirname
-    else:
+    elif not skip_datetime:
         run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
+    else:
+        run_id = ""
 
     if cfg.wandb.enable:
         key = os.environ.get("WANDB_API_KEY")
@@ -56,7 +58,7 @@ def setup(config_file):
 
     output_dir = Path(cfg.output_dir, run_id)
     if distributed.is_main_process():
-        output_dir.mkdir(exist_ok=cfg.resume, parents=True)
+        output_dir.mkdir(exist_ok=cfg.resume or skip_datetime, parents=True)
     cfg.output_dir = str(output_dir)
 
     fix_random_seeds(0)
@@ -65,7 +67,7 @@ def setup(config_file):
     cfg_path = write_config(cfg, cfg.output_dir)
     if cfg.wandb.enable:
         wandb_run.save(cfg_path)
-    return cfg
+    return cfg, run_id
 
 
 def setup_distributed():

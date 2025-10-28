@@ -5,10 +5,16 @@ import torch.nn as nn
 
 from einops import rearrange
 from omegaconf import DictConfig
-from transformers import AutoModel
+from transformers import AutoModel, AutoImageProcessor
 from torchvision import transforms
+from torchvision.transforms import v2
 from timm.data import resolve_data_config
+from timm.data.constants import IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
 from timm.data.transforms_factory import create_transform
+
+from conch.open_clip_custom import create_model_from_pretrained
+from musk import modeling as musk_modeling
+from musk import utils as musk_utils
 
 import slide2vec.distributed as distributed
 import slide2vec.models.vision_transformer_dino as vits_dino
@@ -41,9 +47,17 @@ class ModelFactory:
             elif options.name == "h-optimus-1":
                 model = Hoptimus1()
             elif options.name == "h-optimus-0-mini" or options.name == "h0-mini":
-                model = Hoptimus0Mini(
-                    mode=options.mode
-                )
+                model = Hoptimus0Mini(mode=options.mode)
+            elif options.name == "conch":
+                model = CONCH()
+            elif options.name == "musk":
+                model = MUSK()
+            elif options.name == "phikonv2":
+                model = PhikonV2()
+            elif options.name == "hibou":
+                model = Hibou(arch=options.arch)
+            elif options.name == "kaiko":
+                model = Kaiko(arch=options.arch)
             elif options.name == "rumc-vit-s-50k":
                 model = CustomViT(
                     arch=options.arch,
@@ -71,6 +85,16 @@ class ModelFactory:
                 tile_encoder = Hoptimus0()
             elif options.name == "h-optimus-1":
                 tile_encoder = Hoptimus1()
+            elif options.name == "conch":
+                model = CONCH()
+            elif options.name == "musk":
+                model = MUSK()
+            elif options.name == "phikonv2":
+                model = PhikonV2()
+            elif options.name == "hibou":
+                model = Hibou()
+            elif options.name == "kaiko":
+                model = Kaiko(arch=options.arch)
             elif options.name == "rumc-vit-s-50k":
                 tile_encoder = CustomViT(
                     arch=options.arch,
@@ -161,7 +185,9 @@ class DINOViT(FeatureExtractor):
         nn.modules.utils.consume_prefix_in_state_dict_if_present(
             state_dict, prefix="backbone."
         )
-        state_dict, msg = update_state_dict(model_dict=self.encoder.state_dict(), state_dict=state_dict)
+        state_dict, msg = update_state_dict(
+            model_dict=self.encoder.state_dict(), state_dict=state_dict
+        )
         if distributed.is_main_process():
             print(msg)
         self.encoder.load_state_dict(state_dict, strict=False)
@@ -191,8 +217,9 @@ class DINOViT(FeatureExtractor):
         return transform
 
     def forward(self, x):
-        return self.encoder(x)
-
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 class CustomViT(FeatureExtractor):
     def __init__(
@@ -242,7 +269,9 @@ class CustomViT(FeatureExtractor):
         nn.modules.utils.consume_prefix_in_state_dict_if_present(
             state_dict, prefix="backbone."
         )
-        state_dict, msg = update_state_dict(model_dict=self.encoder.state_dict(), state_dict=state_dict)
+        state_dict, msg = update_state_dict(
+            model_dict=self.encoder.state_dict(), state_dict=state_dict
+        )
         if distributed.is_main_process():
             print(msg)
         self.encoder.load_state_dict(state_dict, strict=False)
@@ -263,7 +292,9 @@ class CustomViT(FeatureExtractor):
         return transform
 
     def forward(self, x):
-        return self.encoder(x)
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 
 class UNI(FeatureExtractor):
@@ -281,7 +312,9 @@ class UNI(FeatureExtractor):
         return encoder
 
     def forward(self, x):
-        return self.encoder(x)
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 
 class UNI2(FeatureExtractor):
@@ -311,7 +344,9 @@ class UNI2(FeatureExtractor):
         return encoder
 
     def forward(self, x):
-        return self.encoder(x)
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 
 class Virchow(FeatureExtractor):
@@ -338,12 +373,13 @@ class Virchow(FeatureExtractor):
             :, 1:
         ]  # size: 1 x 256 x 1280, tokens 1-4 are register tokens so we ignore those
         if self.mode == "cls":
-            return class_token
+            output = {"embedding": class_token}
         elif self.mode == "full":
             embedding = torch.cat(
                 [class_token, patch_tokens.mean(1)], dim=-1
             )  # size: 1 x 2560
-            return embedding
+            output = {"embedding": embedding}
+        return output
 
 
 class Virchow2(FeatureExtractor):
@@ -370,12 +406,13 @@ class Virchow2(FeatureExtractor):
             :, 5:
         ]  # size: 1 x 256 x 1280, tokens 1-4 are register tokens so we ignore those
         if self.mode == "cls":
-            return class_token
+            output = {"embedding": class_token}
         elif self.mode == "full":
             embedding = torch.cat(
                 [class_token, patch_tokens.mean(1)], dim=-1
             )  # size: 1 x 2560
-            return embedding
+            output = {"embedding": embedding}
+        return output
 
 
 class ProvGigaPath(FeatureExtractor):
@@ -391,7 +428,9 @@ class ProvGigaPath(FeatureExtractor):
         return encoder
 
     def forward(self, x):
-        return self.encoder(x)
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 
 class Hoptimus0(FeatureExtractor):
@@ -409,7 +448,9 @@ class Hoptimus0(FeatureExtractor):
         return encoder
 
     def forward(self, x):
-        return self.encoder(x)
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 
 class Hoptimus1(FeatureExtractor):
@@ -427,7 +468,9 @@ class Hoptimus1(FeatureExtractor):
         return encoder
 
     def forward(self, x):
-        return self.encoder(x)
+        embedding = self.encoder(x)
+        output = {"embedding": embedding}
+        return output
 
 
 class Hoptimus0Mini(FeatureExtractor):
@@ -454,12 +497,152 @@ class Hoptimus0Mini(FeatureExtractor):
             :, self.encoder.num_prefix_tokens :
         ]  # size: 1 x 256 x 768
         if self.mode == "cls":
-            return cls_features
+            output = {"embedding": cls_features}
         elif self.mode == "full":
             embedding = torch.cat(
                 [cls_features, patch_token_features.mean(1)], dim=-1
             )  # size: 1 x 1536
-            return embedding
+            output = {"embedding": embedding}
+        return output
+
+
+class CONCH(FeatureExtractor):
+    def __init__(self):
+        self.features_dim = 512
+        super(CONCH, self).__init__()
+
+    def build_encoder(self):
+        encoder, transform = create_model_from_pretrained(
+            "conch_ViT-B-16",
+            "hf_hub:MahmoodLab/conch",
+        )
+        self.transform = transform
+        return encoder
+
+    def get_transforms(self):
+        return self.transform
+
+    def forward(self, x):
+        embedding = self.encoder.encode_image(x, proj_contrast=False, normalize=False)
+        output = {"embedding": embedding}
+        return output
+
+
+class MUSK(FeatureExtractor):
+    def __init__(self):
+        self.features_dim = 2048
+        super(MUSK, self).__init__()
+
+    def build_encoder(self):
+        encoder = timm.create_model("musk_large_patch16_384")
+        musk_utils.load_model_and_may_interpolate(
+            "hf_hub:xiangjx/musk", encoder, "model|module", ""
+        )
+        return encoder
+
+    def get_transforms(self):
+        return transforms.Compose(
+            [
+                transforms.Resize(384, interpolation=3, antialias=True),
+                transforms.CenterCrop((384, 384)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=IMAGENET_INCEPTION_MEAN, std=IMAGENET_INCEPTION_STD
+                ),
+            ]
+        )
+
+    def forward(self, x):
+        embedding = self.encoder(
+            image=x,
+            with_head=False,
+            out_norm=False,
+            ms_aug=True,
+            return_global=True,
+        )[0]
+        output = {"embedding": embedding}
+        return output
+
+
+class PhikonV2(FeatureExtractor):
+    def __init__(self):
+        self.features_dim = 1024
+        super(PhikonV2, self).__init__()
+
+    def build_encoder(self):
+        return AutoModel.from_pretrained("owkin/phikon-v2", trust_remote_code=True)
+
+    def get_transforms(self):
+        return AutoImageProcessor.from_pretrained("owkin/phikon-v2", trust_remote_code=True)
+
+    def forward(self, x):
+        embedding = self.encoder(x).last_hidden_state[:, 0, :]
+        output = {"embedding": embedding}
+        return output
+
+
+class Kaiko(FeatureExtractor):
+    def __init__(self, arch: str = "vits16"):
+        self.arch = arch
+        self.features_dim = 384
+        if arch == "vits8":
+            self.features_dim = 384
+        elif arch == "vitb8":
+            self.features_dim = 768
+        elif arch == "vitb16":
+            self.features_dim = 768
+        elif arch == "vitl14":
+            self.features_dim = 1024
+        super(Kaiko, self).__init__()
+
+    def build_encoder(self):
+        encoder = torch.hub.load(
+            "kaiko-ai/towards_large_pathology_fms", self.arch, trust_repo=True
+        )
+        return encoder
+
+    def get_transforms(self):
+        return v2.Compose(
+            [
+                v2.ToImage(),
+                v2.Resize(size=224),
+                v2.CenterCrop(size=224),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(
+                    mean=(0.5, 0.5, 0.5),
+                    std=(0.5, 0.5, 0.5),
+                ),
+            ]
+        )
+
+    def forward(self, x):
+        embedding = self.encoder(x)
+        import ipdb; ipdb.set_trace()
+        output = {"embedding": embedding}
+        return output
+
+
+class Hibou(FeatureExtractor):
+    def __init__(self, arch="hibou-b"):
+        self.arch = arch
+        self.features_dim = 768
+        if arch == "hibou-L":
+            self.features_dim = 1024
+        super(Hibou, self).__init__()
+
+    def build_encoder(self):
+        model = f"histai/{self.arch}"
+        return AutoModel.from_pretrained(model, trust_remote_code=True)
+
+    def get_transforms(self):
+        return AutoImageProcessor.from_pretrained(
+            "histai/hibou-L", trust_remote_code=True
+        )
+
+    def forward(self, x):
+        embedding = self.encoder(x).last_hidden_state[:, 0, :]
+        output = {"embedding": embedding}
+        return output
 
 
 class RegionFeatureExtractor(nn.Module):
@@ -482,9 +665,10 @@ class RegionFeatureExtractor(nn.Module):
         B = x.size(0)
         x = rearrange(x, "b p c w h -> (b p) c w h")  # [B*num_tiles, 3, 224, 224]
         output = self.tile_encoder(x)  # [B*num_tiles, features_dim]
-        output = rearrange(
+        embedding = rearrange(
             output, "(b p) f -> b p f", b=B
         )  # [B, num_tiles, features_dim]
+        output = {"embedding": embedding}
         return output
 
 
@@ -514,7 +698,7 @@ class SlideFeatureExtractor(nn.Module):
         return self.tile_encoder(x)
 
     def forward_slide(self, **kwargs):
-        return self.slide_encoder(**kwargs)
+        raise NotImplementedError
 
 
 class ProvGigaPathSlide(SlideFeatureExtractor):
@@ -537,7 +721,8 @@ class ProvGigaPathSlide(SlideFeatureExtractor):
     def forward_slide(self, tile_features, tile_coordinates, **kwargs):
         tile_features = tile_features.unsqueeze(0)
         output = self.slide_encoder(tile_features, tile_coordinates)
-        output = output[0].squeeze()
+        embedding = output[0].squeeze()
+        output = {"embedding": embedding}
         return output
 
 
@@ -557,24 +742,19 @@ class TITAN(SlideFeatureExtractor):
 
     def forward_slide(self, tile_features, tile_coordinates, tile_size_lv0, **kwargs):
         tile_features = tile_features.unsqueeze(0)
-        tile_ccordinates = tile_coordinates.to(dtype=torch.long, device=tile_features.device)
         tile_coordinates = tile_coordinates.unsqueeze(0)
-
-        if not torch.is_floating_point(tile_features):
-            tile_features = tile_features.float()
-
-        tile_size_lv0 = int(tile_size_lv0)
-
-        output = self.slide_encoder.encode_slide_from_patch_features(
+        embedding = self.slide_encoder.encode_slide_from_patch_features(
             tile_features, tile_coordinates, tile_size_lv0
         )
+        output = {"embedding": embedding.squeeze(0)}
         return output
 
 
 class PRISM(SlideFeatureExtractor):
-    def __init__(self):
+    def __init__(self, return_latents: bool = False):
         super(PRISM, self).__init__()
         self.features_dim = self.tile_encoder.features_dim
+        self.return_latents = return_latents
 
     def build_encoders(self):
         self.slide_encoder = AutoModel.from_pretrained(
@@ -585,5 +765,10 @@ class PRISM(SlideFeatureExtractor):
     def forward_slide(self, tile_features, **kwargs):
         tile_features = tile_features.unsqueeze(0)
         reprs = self.slide_encoder.slide_representations(tile_features)
-        output = reprs["image_embedding"]  # [1, 1280]
+        embedding = reprs["image_embedding"].squeeze(0)  # [1280]
+        if self.return_latents:
+            latents = reprs["image_latents"].squeeze(0)  # [512, 1280]
+            output = {"embedding": embedding, "latents": latents}
+        else:
+            output = {"embedding": embedding}
         return output

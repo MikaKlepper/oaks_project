@@ -278,18 +278,11 @@ def enable(
             _check_env_variable(key, value)
         os.environ[key] = value
 
-    # dist.init_process_group(
-    #     backend="nccl",
-    #     timeout=datetime.timedelta(days=14),
-    #     device_id=torch.device(f"cuda:{torch_env.local_rank}")
-    # )
-    # dist.barrier()
-
     dist.init_process_group(
-    backend="nccl",
-    timeout=datetime.timedelta(days=14),
-)
-    torch.cuda.set_device(torch_env.local_rank)  # manually set GPU
+        backend="nccl",
+        timeout=datetime.timedelta(days=14),
+        device_id=torch.device(f"cuda:{torch_env.local_rank}")
+    )
     dist.barrier()
 
     # Finalize setup

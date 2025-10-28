@@ -19,9 +19,7 @@ from slide2vec.utils.config import get_cfg_from_file, setup_distributed
 from slide2vec.models import ModelFactory
 from slide2vec.data import TileDataset, RegionUnfolding
 
-if hasattr(torchvision, "disable_beta_transforms_warning"):
-    torchvision.disable_beta_transforms_warning()
-
+torchvision.disable_beta_transforms_warning()
 
 
 def get_args_parser(add_help: bool = True):
@@ -34,6 +32,9 @@ def get_args_parser(add_help: bool = True):
         type=str,
         default="",
         help="Name of output subdirectory",
+    )
+    parser.add_argument(
+        "--run-on-cpu", action="store_true", help="run inference on cpu"
     )
     return parser
 
@@ -63,14 +64,15 @@ def create_dataset(wsi_fp, coordinates_dir, spacing, backend, transforms):
     )
 
 
-def run_inference(dataloader, model, device, autocast_context, unit, batch_size, feature_path, feature_dim, dtype):
+def run_inference(dataloader, model, device, autocast_context, unit, batch_size, feature_path, feature_dim, dtype, run_on_cpu: False):
+    device_name = f"GPU {distributed.get_global_rank()}" if not run_on_cpu else "CPU"
     with h5py.File(feature_path, "w") as f:
         features = f.create_dataset("features", shape=(0, *feature_dim), maxshape=(None, *feature_dim), dtype=dtype, chunks=(batch_size, *feature_dim))
         indices = f.create_dataset("indices", shape=(0,), maxshape=(None,), dtype='int64', chunks=(batch_size,))
         with torch.inference_mode(), autocast_context:
             for batch in tqdm.tqdm(
                 dataloader,
-                desc=f"Inference on GPU {distributed.get_global_rank()}",
+                desc=f"Inference on {device_name}",
                 unit=unit,
                 unit_scale=batch_size,
                 leave=False,
@@ -78,7 +80,7 @@ def run_inference(dataloader, model, device, autocast_context, unit, batch_size,
             ):
                 idx, image = batch
                 image = image.to(device, non_blocking=True)
-                feature = model(image).cpu().numpy()
+                feature = model(image)["embedding"].cpu().numpy()
                 features.resize(features.shape[0] + feature.shape[0], axis=0)
                 features[-feature.shape[0]:] = feature
                 indices.resize(indices.shape[0] + idx.shape[0], axis=0)
@@ -88,7 +90,8 @@ def run_inference(dataloader, model, device, autocast_context, unit, batch_size,
                 del image, feature
 
     # cleanup
-    torch.cuda.empty_cache()
+    if not run_on_cpu:
+        torch.cuda.empty_cache()
     gc.collect()
 
 
@@ -118,11 +121,13 @@ def load_sort_and_deduplicate_features(tmp_dir, name, expected_len=None):
 
 def main(args):
     # setup configuration
+    run_on_cpu = args.run_on_cpu
     cfg = get_cfg_from_file(args.config_file)
     output_dir = Path(cfg.output_dir, args.run_id)
     cfg.output_dir = str(output_dir)
 
-    setup_distributed()
+    if not run_on_cpu:
+        setup_distributed()
 
     if cfg.tiling.read_coordinates_from:
         coordinates_dir = Path(cfg.tiling.read_coordinates_from)
@@ -157,7 +162,8 @@ def main(args):
         model = ModelFactory(cfg.model).get_model()
         if distributed.is_main_process():
             print(f"Starting {unit}-level feature extraction...")
-        torch.distributed.barrier()
+        if not run_on_cpu:
+            torch.distributed.barrier()
 
         # select slides that were successfully tiled but not yet processed for feature extraction
         tiled_df = process_df[process_df.tiling_status == "success"]
@@ -176,7 +182,7 @@ def main(args):
 
         autocast_context = (
             torch.autocast(device_type="cuda", dtype=torch.float16)
-            if cfg.speed.fp16
+            if (cfg.speed.fp16 and not run_on_cpu)
             else nullcontext()
         )
         feature_extraction_updates = {}
@@ -213,13 +219,15 @@ def main(args):
 
                 name = wsi_fp.stem.replace(" ", "_")
                 feature_path = features_dir / f"{name}.pt"
+                if cfg.model.save_tile_embeddings:
+                    feature_path = features_dir / f"{name}-tiles.pt"
                 tmp_feature_path = tmp_dir / f"{name}-rank_{distributed.get_global_rank()}.h5"
 
                 # get feature dimension and dtype using a dry run
                 with torch.inference_mode(), autocast_context:
                     sample_batch = next(iter(dataloader))
                     sample_image = sample_batch[1].to(model.device)
-                    sample_feature = model(sample_image).cpu().numpy()
+                    sample_feature = model(sample_image)["embedding"].cpu().numpy()
                     feature_dim = sample_feature.shape[1:]
                     dtype = sample_feature.dtype
 
@@ -233,9 +241,11 @@ def main(args):
                     tmp_feature_path,
                     feature_dim,
                     dtype,
+                    run_on_cpu,
                 )
 
-                torch.distributed.barrier()
+                if not run_on_cpu:
+                    torch.distributed.barrier()
 
                 if distributed.is_main_process():
                     wsi_feature = load_sort_and_deduplicate_features(tmp_dir, name, expected_len=len(dataset))
@@ -243,10 +253,12 @@ def main(args):
 
                     # cleanup
                     del wsi_feature
-                    torch.cuda.empty_cache()
+                    if not run_on_cpu:
+                        torch.cuda.empty_cache()
                     gc.collect()
 
-                torch.distributed.barrier()
+                if not run_on_cpu:
+                    torch.distributed.barrier()
 
                 feature_extraction_updates[str(wsi_fp)] = {"status": "success"}
 
@@ -259,8 +271,6 @@ def main(args):
 
             # update process_df
             if distributed.is_main_process():
-
-
                 status_info = feature_extraction_updates[str(wsi_fp)]
                 process_df.loc[
                     process_df["wsi_path"] == str(wsi_fp), "feature_status"
@@ -299,9 +309,3 @@ def main(args):
 if __name__ == "__main__":
     args = get_args_parser(add_help=True).parse_args()
     main(args)
-
-
-
-
-
-

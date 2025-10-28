@@ -1,13 +1,12 @@
-csv: "/data/temporary/mika/repos/slide_2_vec/liver_slide_full_paths_s2v.csv" # path to a csv file containing two columns: "slide" with the full path to each slide, and "label" with the associated label (optional)
+csv: # path to csv containing slide paths
 
-output_dir: "/data/temporary/mika/outputs_slide_2_vec/uni_output" # output directory
-resume: true # resume from a previous run
-resume_dirname:  "/data/temporary/mika/outputs_slide_2_vec/uni_output" # directory name to resume from
+output_dir: "output" # output directory
+resume: false # resume from a previous run
+resume_dirname: # directory name to resume from
 
 visualize: true # save a visualization of slide tiling in a .jpg
 
 seed: 0 # seed for reproducibility
-
 
 tiling:
   read_coordinates_from: # path to a directory containing {wsi.stem}.npy files with tiles coordinates & associated metadata (leave empty to compute the coordinates)
@@ -45,6 +44,8 @@ model:
   batch_size: 1
   tile_size: ${tiling.params.tile_size}
   patch_size: 256 # if level is "region", size used to unroll the region into patches
+  save_tile_embeddings: false # whether to save tile embeddings alongside the pooled slide embedding when level is "slide"
+  save_latents: false # whether to save the latent representations from the model alongside the slide embedding (only supported for 'prism')
 
 speed:
   fp16: false # use mixed precision during model inference
