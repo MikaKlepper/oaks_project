@@ -34,6 +34,12 @@ class ModelFactory:
         if options.level == "tile":
             if options.name == "virchow":
                 model = Virchow(mode=options.mode)
+            elif options.name == "resnet50":
+                model = ResNet50()
+            # elif options.name == "ctranspath":
+            #     model = CTransPath()
+            elif options.name == "midnight12k":
+                model = Midnight()
             elif options.name == "virchow2":
                 model = Virchow2(mode=options.mode)
             elif options.name == "uni":
@@ -54,6 +60,8 @@ class ModelFactory:
                 model = MUSK()
             elif options.name == "phikonv2":
                 model = PhikonV2()
+            elif options.name == "phikon":
+                model = Phikon()
             elif options.name == "hibou":
                 model = Hibou(arch=options.arch)
             elif options.name == "kaiko":
@@ -315,6 +323,120 @@ class UNI(FeatureExtractor):
         embedding = self.encoder(x)
         output = {"embedding": embedding}
         return output
+
+class ResNet50(FeatureExtractor):
+    """ResNet-50 feature extractor (Hugging Face version)."""
+
+    def __init__(self):
+        self.features_dim = 2048  # Output feature dimension after global pooling
+        super().__init__()
+
+    def build_encoder(self):
+        # Load official ResNet-50 from Hugging Face (pretrained on ImageNet)
+        model = AutoModel.from_pretrained("microsoft/resnet-50", trust_remote_code=True)
+        return model
+
+    def get_transforms(self):
+        # Load the exact preprocessing pipeline for microsoft/resnet-50
+        processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+        return processor
+
+    def forward(self, x):
+        """
+        Forward pass through the model.
+        Expects inputs to already be processed by the associated processor:
+        processor(images, return_tensors="pt")["pixel_values"]
+        """
+        outputs = self.encoder(x)
+        # Get the pooled 2048-dim embedding
+        embedding = outputs.pooler_output
+        return {"embedding": embedding}
+    
+class Midnight(FeatureExtractor):
+    def __init__(self, mode: str = "cls"):
+        """
+        Midnight feature extractor using Kaiko-AI's DINOv2-Large model.
+        Args:
+            mode (str): "cls" for CLS-only embeddings (1536-D),
+                        "full" for CLS + mean(patches) embeddings (3072-D).
+        """
+        self.mode = mode
+        self.features_dim = 1536 if mode == "cls" else 3072
+        super(Midnight, self).__init__()
+
+    def build_encoder(self):
+        print(f"[Midnight] Loading Kaiko-AI Midnight model (mode={self.mode})...")
+        model = AutoModel.from_pretrained("kaiko-ai/midnight", trust_remote_code=True)
+        model.eval()
+        print("[Midnight] Model loaded successfully.")
+        return model
+
+    def get_transforms(self):
+        from torchvision import transforms
+        mean = (0.5, 0.5, 0.5)
+        std = (0.5, 0.5, 0.5)
+        return transforms.Compose([
+            transforms.Resize(224),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std),
+        ])
+
+    def forward(self, x):
+        output = self.encoder(x)
+        hidden = output.last_hidden_state  # shape: [B, N_tokens, 1536]
+        cls_token = hidden[:, 0]           # CLS token
+        patch_tokens = hidden[:, 1:]       # patch tokens
+
+        if self.mode == "cls":
+            embedding = cls_token
+        elif self.mode == "full":
+            embedding = torch.cat(
+                [cls_token, patch_tokens.mean(1)], dim=-1
+            )
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
+
+        return {"embedding": embedding}
+
+
+# class CTransPath(FeatureExtractor):
+#     def __init__(self):
+#         # official Swin-Tiny backbone outputs 768-dim features
+#         self.features_dim = 768
+#         super(CTransPath, self).__init__()
+
+#     def build_encoder(self):
+
+#         from ctran import ctranspath
+#         print("[CTransPath] Building model...")
+#         model = ctranspath()
+#         model.head = nn.Identity()  # remove classification head for feature extraction
+
+#         ckpt_path = "/data/temporary/mika/repos/TransPath/ctranspath.pth"
+#         print(f"[CTransPath] Loading pretrained weights from {ckpt_path}")
+
+#         ckpt = torch.load(ckpt_path, map_location="cpu")
+#         state_dict = ckpt["model"] if "model" in ckpt else ckpt
+#         model.load_state_dict(state_dict, strict=True)
+
+#         print("[CTransPath] Model loaded successfully.")
+#         model.eval()
+#         return model
+
+#     def get_transforms(self):
+#         mean = (0.485, 0.456, 0.406)
+#         std = (0.229, 0.224, 0.225)
+#         return transforms.Compose([
+#             transforms.Resize(224),
+#             transforms.ToTensor(),
+#             transforms.Normalize(mean=mean, std=std),
+#         ])
+
+#     def forward(self, x):
+#         embedding = self.encoder(x)
+#         return {"embedding": embedding}
+
 
 
 class UNI2(FeatureExtractor):
@@ -581,6 +703,23 @@ class PhikonV2(FeatureExtractor):
         return output
 
 
+class Phikon(FeatureExtractor):
+    def __init__(self):
+        self.features_dim = 768  # older Phikon dimension
+        super(Phikon, self).__init__()
+
+    def build_encoder(self):
+        return AutoModel.from_pretrained("owkin/phikon", trust_remote_code=True)
+
+    def get_transforms(self):
+        return AutoImageProcessor.from_pretrained("owkin/phikon", trust_remote_code=True)
+
+    def forward(self, x):
+        embedding = self.encoder(x).last_hidden_state[:, 0, :]
+        output = {"embedding": embedding}
+        return output
+
+
 class Kaiko(FeatureExtractor):
     def __init__(self, arch: str = "vits16"):
         self.arch = arch
@@ -597,9 +736,28 @@ class Kaiko(FeatureExtractor):
 
     def build_encoder(self):
         encoder = torch.hub.load(
-            "kaiko-ai/towards_large_pathology_fms", self.arch, trust_repo=True
-        )
+                "kaiko-ai/towards_large_pathology_fms", self.arch, trust_repo=True
+            )
         return encoder
+    
+    # def build_encoder(self):
+    #     print(f"[Kaiko] Requested architecture: {self.arch}")
+
+    #     if self.arch == "vitl14":
+    #         # Hugging Face path → Kaiko Midnight (ViT-L/14)
+    #         print("[Kaiko] Loading Kaiko Midnight (ViT-L/14) from Hugging Face...")
+    #         encoder = AutoModel.from_pretrained("kaiko-ai/midnight")
+    #     else:
+    #         # Torch Hub path → other Kaiko backbones (vits8, vitb16, etc.)
+    #         print(f"[Kaiko] Loading Kaiko model '{self.arch}' from Torch Hub...")
+    #         encoder = torch.hub.load(
+    #             "kaiko-ai/towards_large_pathology_fms",
+    #             self.arch,
+    #             trust_repo=True,
+    #         )
+
+    #     print("[Kaiko] Encoder successfully built.\n")
+    #     return encoder
 
     def get_transforms(self):
         return v2.Compose(
@@ -617,7 +775,7 @@ class Kaiko(FeatureExtractor):
 
     def forward(self, x):
         embedding = self.encoder(x)
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
         output = {"embedding": embedding}
         return output
 
@@ -634,10 +792,16 @@ class Hibou(FeatureExtractor):
         model = f"histai/{self.arch}"
         return AutoModel.from_pretrained(model, trust_remote_code=True)
 
+    # def get_transforms(self):
+    #     return AutoImageProcessor.from_pretrained(
+    #         "histai/hibou-L", trust_remote_code=True
+    #     )
     def get_transforms(self):
-        return AutoImageProcessor.from_pretrained(
-            "histai/hibou-L", trust_remote_code=True
-        )
+        model = f"histai/{self.arch}"
+        print(f"[HIBOU] Loading transforms for: {model}")
+        
+        return AutoImageProcessor.from_pretrained(model, trust_remote_code=True)
+
 
     def forward(self, x):
         embedding = self.encoder(x).last_hidden_state[:, 0, :]
@@ -695,7 +859,13 @@ class SlideFeatureExtractor(nn.Module):
         return self.tile_encoder.get_transforms()
 
     def forward(self, x):
-        return self.tile_encoder(x)
+        output = self.tile_encoder(x)
+
+        if isinstance(output, torch.Tensor):
+            output = {"embedding": output}
+        return output
+        # return self.tile_encoder(x)
+    
 
     def forward_slide(self, **kwargs):
         raise NotImplementedError
@@ -742,7 +912,7 @@ class TITAN(SlideFeatureExtractor):
 
     def forward_slide(self, tile_features, tile_coordinates, tile_size_lv0, **kwargs):
         tile_features = tile_features.unsqueeze(0)
-        tile_coordinates = tile_coordinates.unsqueeze(0)
+        tile_coordinates = tile_coordinates.unsqueeze(0).long()
         embedding = self.slide_encoder.encode_slide_from_patch_features(
             tile_features, tile_coordinates, tile_size_lv0
         )

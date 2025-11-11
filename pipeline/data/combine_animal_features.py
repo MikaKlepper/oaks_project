@@ -175,5 +175,7 @@ if __name__ == "__main__":
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+
     # Run the aggregation
     combine_slide_features_by_animal_organ_UID(config)
+

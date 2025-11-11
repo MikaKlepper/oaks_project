@@ -13,6 +13,7 @@ class SlideDataset(Dataset):
         Dataset for animal-level (aggregated) data.
         Uses pre-enriched metadata and filters by split or subset.
 
+        
         Args:
             metadata_csv (str): Path to metadata file (must contain subject_organ_UID, wsi_path, HasHypertrophy, Location, Severity).
             organ (str): Organ filter (e.g., "Liver" or "Kidney").

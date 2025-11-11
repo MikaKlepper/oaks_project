@@ -7,22 +7,23 @@
 # data paths and settings
 # configs/config.yaml
 data:
-  root: /data/temporary/mika/repos/splitting_data
+  root: /data/temporary/mika/repos/oaks_project/splitting_data
   metadata_csv: /data/pa_cpgarchive/archives/toxicology/open-tg-gates/metadata_SD/open_tggates_master_list.csv
   organ: Liver
 
-
 datasets:
   use_subset: true    # if true → use subset csv, otherwise full train/val/test
-  train: /data/temporary/mika/repos/splitting_data/Splits/train.csv
-  val:   /data/temporary/mika/repos/splitting_data/Splits/val.csv
-  test:  /data/temporary/mika/repos/splitting_data/Splits/test.csv
-  subset: /home/mikaklepper/temporary/repos/slide_2_vec/liver_slide_full_paths_s2v.csv
+  subset_type: val
+  train: /data/temporary/mika/repos/oaks_project/splitting_data/Splits/train.csv
+  val:  /data/temporary/mika/repos/oaks_project/splitting_data/Splits/val.csv
+  test:  /data/temporary/mika/repos/oaks_project/splitting_data/Splits/test.csv
+  subset: /data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset.csv
   subset_fraction:  null  # only applied if use_subset=true
 
 features:
-  slide_dir: /data/temporary/toxicology/TG-GATES/liver/UNI/UNI/features
-  animal_dir: /data/temporary/toxicology/TG-GATES/liver/UNI/UNI/animal_features
+  encoder: UNI
+  slide_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/{encoder}/features"
+  animal_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/{encoder}/animal_features"
 
 train:
   batch_size: 8

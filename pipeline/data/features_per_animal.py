@@ -92,6 +92,7 @@ def group_features_by_animal(cfg_path):
     return summary
 
 
+
 if __name__ == "__main__":
     cfg_path = "/data/temporary/mika/repos/oaks_project/pipeline/configs/configs.yaml"
     summary = group_features_by_animal(cfg_path)
