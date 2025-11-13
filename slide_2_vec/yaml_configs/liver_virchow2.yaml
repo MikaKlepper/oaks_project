@@ -1,11 +1,12 @@
 # csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
 # output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/VIRCHOW2" # output directory
 
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
-output_dir: "/scratch_mikaklepper_val/outputs/VIRCHOW2"
+#csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/FewShotCompoundBalanced/train_balanced_fewshot_subset_paths_scratch.csv"
+output_dir: "/scratch_mikaklepper_train/outputs/VIRCHOW2"
 
 resume: true # resume from a previous run
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/VIRCHOW2"
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Trainings_FM/VIRCHOW2"
 # resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/VIRCHOW2" # directory name to resume from
 
 visualize: true # save a visualization of slide tiling in a .jpg

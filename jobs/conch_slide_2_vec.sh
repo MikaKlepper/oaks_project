@@ -101,4 +101,4 @@ echo " Performing final sync to $FINAL_OUTPUT_DIR ..."
 mkdir -p "$FINAL_OUTPUT_DIR"
 cp -ur "$SCRATCH_OUTPUT_DIR"/* "$FINAL_OUTPUT_DIR"/ 2>/dev/null
 
-echo " Slide2Vec Phikon_v2 job completed successfully."
+echo " Slide2Vec CONCH job completed successfully."

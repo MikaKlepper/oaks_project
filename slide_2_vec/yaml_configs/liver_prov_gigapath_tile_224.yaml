@@ -5,12 +5,13 @@
 #resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH" # directory name to resume from
 
 
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
-output_dir: "/scratch_mikaklepper_val/outputs/PROV_GIGAPATH_224_TILE"  # temporary scratch output directory
+#csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/FewShotCompoundBalanced/train_balanced_fewshot_subset_paths_scratch.csv"
+output_dir: "/scratch_mikaklepper_train/outputs/PROV_GIGAPATH_224_TILE"  # temporary scratch output directory
 
 resume: true  # resume from a previous run if outputs already exist
 # resume_dirname: "/scratch_mikaklepper_val/outputs/liver_prov_gigapath"  # scratch directory to resume from
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/PROV_GIGAPATH_224_TILE"
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Trainings_FM/PROV_GIGAPATH_224_TILE"
 
 
 

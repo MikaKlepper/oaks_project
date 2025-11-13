@@ -4,75 +4,106 @@ from pathlib import Path
 import yaml
 
 
+# helper functions
+
+# 1: load yaml
 def load_yaml_config(path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
+
+# 2: export WSI paths
+
 def export_WSI_paths(subset_csv, output_dir):
-    """Extract FILE_LOCATION and save as *_paths.csv"""
     subset_csv = Path(subset_csv)
     df = pd.read_csv(subset_csv)
 
     if "FILE_LOCATION" not in df.columns:
         raise ValueError(f"{subset_csv} must contain FILE_LOCATION")
 
-    wsi_paths = df[["FILE_LOCATION"]].dropna().astype(str)
+    # rename and fix base paths
+    df = df.rename(columns={"FILE_LOCATION": "wsi_path"})
+    df["wsi_path"] = df["wsi_path"].str.replace("RBS_PA_CPGARCHIVE", "pa_cpgarchive", regex=False)
 
+    # save each k separately with all paths
     output_path = output_dir / f"{subset_csv.stem}_paths.csv"
-    wsi_paths.to_csv(output_path, index=False)
-    print(f" Exported WSI paths --> {output_path}")
+    df[["wsi_path"]].dropna().astype(str).to_csv(output_path, index=False)
+    print(f"Exported WSI paths -> {output_path}")
+
+    # only create the scratch version for the final (k=100) subset
+    if subset_csv.stem.endswith("k100"):
+        df_scratch = df.copy()
+        df_scratch["wsi_path"] = df_scratch["wsi_path"].apply(
+            lambda p: f"/scratch_mikaklepper_train/wsis/liver/train/{Path(p).name}"
+        )
+
+        scratch_path = Path(
+            "/data/temporary/mika/repos/oaks_project/splitting_data/FewShotCompoundBalanced/train_balanced_fewshot_subset_paths_scratch.csv"
+        )
+        df_scratch[["wsi_path"]].to_csv(scratch_path, index=False)
+        print(f" Exported scratch WSI paths -> {scratch_path}")
 
 
-def sample_class_with_compound_distribution(df, k, seed=42):
-    """
-    Sample k rows from df balancing by compound distribution.
-    - proportional sampling
-    - robust to small compounds
-    """
+# 3: per-compound compute how many samples to take
+def per_compound_targets(compounds, k, seed=42):
+    n = len(compounds)
+    if n == 0:
+        raise ValueError("No compounds found in dataset.")
+    base, remainder = divmod(k, n)
     random.seed(seed)
-    compounds = df["COMPOUND_NAME"].unique()
-    n_compounds = len(compounds)
+    ordered = random.sample(sorted(compounds), len(compounds))
+    targets = {c: base for c in ordered}
+    for c in ordered[:remainder]:
+        targets[c] += 1
+    return targets
 
-    # Case 1: very small k → pick one per compound
-    if k <= n_compounds:
-        selected_compounds = random.sample(list(compounds), k)
-        sampled = []
-        for comp in selected_compounds:
-            group = df[df["COMPOUND_NAME"] == comp]
-            sampled.append(group.sample(n=1, random_state=seed))
-        return pd.concat(sampled)
 
-    # Case 2: proportional allocation
-    base = k // n_compounds
-    remainder = k % n_compounds
+# 4: grow cumulative subset up to MAX k 
+def grow_to_k(df_full, used_df, k, seed=42):
+    df_unique = df_full.drop_duplicates(subset=["subject_UID"])
+    compounds = df_unique["COMPOUND_NAME"].unique()
+    targets = per_compound_targets(compounds, k, seed)
 
-    extra_compounds = set(random.sample(list(compounds), remainder))
+    current_counts = used_df["COMPOUND_NAME"].value_counts().to_dict()
+    new_samples = []
 
-    sampled = []
     for comp in compounds:
-        group = df[df["COMPOUND_NAME"] == comp]
-        n_take = base + (1 if comp in extra_compounds else 0)
-        n_take = min(len(group), n_take)
-        sampled.append(group.sample(n=n_take, random_state=seed))
+        group = df_unique[df_unique["COMPOUND_NAME"] == comp]
+        current = current_counts.get(comp, 0)
+        needed = max(0, targets[comp] - current)
 
-    result = pd.concat(sampled)
+        if needed > 0:
+            available = group[~group["subject_UID"].isin(used_df["subject_UID"])]
+            take = min(len(available), needed)
+            if take > 0:
+                new_samples.append(available.sample(n=take, random_state=seed))
 
-    # top up if undersampled
-    if len(result) < k:
-        missing = k - len(result)
-        remaining = df[~df.index.isin(result.index)]
-        extra = remaining.sample(n=missing, replace=True, random_state=seed)
-        result = pd.concat([result, extra])
+    # Combine new samples
+    if new_samples:
+        added = pd.concat(new_samples, ignore_index=True)
+        used_df = pd.concat([used_df, added], ignore_index=True).drop_duplicates(subset=["subject_UID"])
 
-    # if overshoot
-    if len(result) > k:
-        result = result.sample(n=k, random_state=seed)
+    # fill remaining slots if total < k (especially helps positives)
+    if len(used_df) < k:
+        remaining = df_unique[~df_unique["subject_UID"].isin(used_df["subject_UID"])]
+        missing = k - len(used_df)
+        if len(remaining) > 0:
+            extra = remaining.sample(n=min(missing, len(remaining)), random_state=seed)
+            used_df = pd.concat([used_df, extra], ignore_index=True)
 
-    return result.reset_index(drop=True)
+    # shuffle the whole thing
+    used_df = used_df.sample(n=min(k, len(used_df)), random_state=seed).reset_index(drop=True)
+
+    # check if it works and k is reached
+    if len(used_df) != k:
+        print(f" Warning: Could not reach full k={k}. Got only {len(used_df)} samples. ")
+    else:
+        print(f" Verified: subset reached exactly k={k} samples.")
+    return used_df
 
 
-def create_fewshot_compound_subsets(config_path, ks=[5, 10, 20, 50, 100]):
-    # load dataset
+# 5: main few-shot subset creation
+def create_fewshot_compound_balanced(config_path, ks=[5, 10, 20, 40, 80, 100]):
     config = load_yaml_config(config_path)
     train_csv = config["datasets"]["train"]
     df = pd.read_csv(train_csv)
@@ -80,32 +111,36 @@ def create_fewshot_compound_subsets(config_path, ks=[5, 10, 20, 50, 100]):
     required_cols = ["slide_id", "subject_UID", "HasHypertrophy", "COMPOUND_NAME", "FILE_LOCATION"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
-        raise ValueError(f"CSV missing required columns: {missing}")
+        raise ValueError(f"CSV missing columns: {missing}")
 
     pos_df = df[df["HasHypertrophy"] == 1]
     neg_df = df[df["HasHypertrophy"] == 0]
 
-    out_dir = Path(config["data"]["root"]) / "FewShotCompoundAware"
+    out_dir = Path(config["data"]["root"]) / "FewShotCompoundBalanced"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    print(f"[INFO] Found {len(pos_df)} positive and {len(neg_df)} negative samples.")
+    print(f"[INFO] Positive compounds: {pos_df['COMPOUND_NAME'].nunique()}, Negative compounds: {neg_df['COMPOUND_NAME'].nunique()}")
+
+    used_pos = pd.DataFrame(columns=df.columns)
+    used_neg = pd.DataFrame(columns=df.columns)
+
     for k in ks:
-        print(f"\n=== Creating k={k} few-shot compound-aware subset ===")
+        print(f"\n--- Creating cumulative few-shot subset for k={k} ---")
 
-        few_pos = sample_class_with_compound_distribution(pos_df, k)
-        few_neg = sample_class_with_compound_distribution(neg_df, k)
+        used_pos = grow_to_k(pos_df, used_pos, k, seed=42)
+        used_neg = grow_to_k(neg_df, used_neg, k, seed=42)
 
-        combined = pd.concat([few_pos, few_neg]).sample(frac=1, random_state=42)
-        output_csv = out_dir / f"train_fewshot_compound_{k}.csv"
+        combined = pd.concat([used_pos, used_neg]).sample(frac=1, random_state=42)
+
+        output_csv = out_dir / f"train_fewshot_k{k}.csv"
         combined.to_csv(output_csv, index=False)
+        print(f"Saved cumulative few-shot subset -> {output_csv}")
 
-        print(f"Saved few-shot CSV → {output_csv}")
-        print(f"Positives={len(few_pos)}, Negatives={len(few_neg)}")
-
-        # export WSI paths
         export_WSI_paths(output_csv, out_dir)
 
-        # save summary distribution
-        summary_path = out_dir / f"train_fewshot_compound_{k}_summary.csv"
+        # Per-compound summary (sorted + pretty)
+        summary_path = out_dir / f"train_fewshot_k{k}_summary.csv"
         summary_df = (
             combined.groupby(["HasHypertrophy", "COMPOUND_NAME"])
             .size()
@@ -114,14 +149,16 @@ def create_fewshot_compound_subsets(config_path, ks=[5, 10, 20, 50, 100]):
             .fillna(0)
             .rename(columns={0: "Non-Hypertrophy", 1: "Hypertrophy"})
             .astype(int)
+            .sort_index()
         )
         summary_df.to_csv(summary_path)
-
         print(f"Saved summary -> {summary_path}")
+        print(summary_df)
 
-    print("\n All few-shot compound-aware subsets were created successfully !!")
+    print("\n All cumulative, compound-prioritized few-shot subsets created successfully.")
 
 
+# Run
 if __name__ == "__main__":
     cfg_path = "/data/temporary/mika/repos/oaks_project/pipeline/configs/configs.yaml"
-    create_fewshot_compound_subsets(cfg_path)
+    create_fewshot_compound_balanced(cfg_path, ks=[5, 10, 20, 40, 80, 100])

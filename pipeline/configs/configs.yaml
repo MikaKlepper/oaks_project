@@ -13,11 +13,12 @@ data:
 
 datasets:
   use_subset: true    # if true → use subset csv, otherwise full train/val/test
-  subset_type: val
+  subset_type: train
   train: /data/temporary/mika/repos/oaks_project/splitting_data/Splits/train.csv
   val:  /data/temporary/mika/repos/oaks_project/splitting_data/Splits/val.csv
   test:  /data/temporary/mika/repos/oaks_project/splitting_data/Splits/test.csv
-  subset: /data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset.csv
+  #subset: /data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset.csv
+  subset: "/data/temporary/mika/repos/oaks_project/splitting_data/FewShotCompoundBalanced/train_balanced_fewshot_subset_paths_scratch.csv"
   subset_fraction:  null  # only applied if use_subset=true
 
 features:
@@ -36,12 +37,12 @@ train:
 
 splitting:
   num_repeats: 1000
-  partitions_train_val_test: /data/temporary/mika/repos/splitting_data/Partitions_train_val_test
-  partitions_train_val: /data/temporary/mika/repos/splitting_data/Partitions_train_val
-  summary_csv: /data/temporary/mika/repos/splitting_data/Splits/split_summary.csv
+  partitions_train_val_test: /data/temporary/mika/repos/oaks_project/splitting_data/Partitions_train_val_test
+  partitions_train_val: /data/temporary/mika/repos/oaks_project/splitting_data/Partitions_train_val
+  summary_csv: /data/temporary/mika/repos/oaks_project/splitting_data/Splits/split_summary.csv
 
 subset_creation:
   enabled: false           # set to true OR use --subset flag
   target_split: val       # or "train" if you want a balanced training subset
-  output_dir: /data/temporary/mika/repos/splitting_data/Subsets
+  output_dir: /data/temporary/mika/repos/oaks_project/splitting_data/Subsets
 

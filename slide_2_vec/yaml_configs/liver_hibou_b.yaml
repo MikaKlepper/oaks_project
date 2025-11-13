@@ -1,9 +1,10 @@
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
-output_dir: "/scratch_mikaklepper_val/outputs/HIBOU_B"
+#csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths_scratch.csv"
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/FewShotCompoundBalanced/train_balanced_fewshot_subset_paths_scratch.csv"
+output_dir: "/scratch_mikaklepper_train/outputs/HIBOU_B"
 
 resume: true # resume from a previous run
 # resume_dirname: "/scratch_mikaklepper_val/outputs/liver_titan" # directory name to resume from
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/HIBOU_B"
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Trainings_FM/HIBOU_B"
 
 
 # csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
