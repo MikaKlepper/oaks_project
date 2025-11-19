@@ -11,6 +11,7 @@ data:
 
 datasets:
   use_subset: false
+  subset_csv: null
   subset_type: train
 
   train: "${data.data_root}/Splits/train.csv"
@@ -18,12 +19,12 @@ datasets:
   test:  "${data.data_root}/Splits/test.csv"
 
   # few-shot gets merged in overrides
-  subset: null
 
 features:
-  encoder: "UNI"                   
-  slide_dir: "/data/toxicology/TG-GATES/liver/features/${features.encoder}"
-  animal_dir: "/data/toxicology/TG-GATES/liver/animal_features/${features.encoder}"
+  encoder: "UNI"    
+  features_root: "/data/toxicology/TG-GATES/liver
+  train_animal_dir: "${features.features_root}/Training_FM/${features.encoder}/animal_features"
+  val_animal_dir:   "${features.features_root}/Validation_FM/${features.encoder}/animal_features"
   in_dim: null 
 
 aggregation:

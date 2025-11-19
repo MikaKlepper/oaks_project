@@ -6,33 +6,72 @@ from torch.utils.data import Dataset
 
 
 class AnimalDataset(Dataset):
-    def __init__(
-            self, 
-            metadata_csv: str,
-            organ: str = "Liver",
-            split_csv: str | None = None,
-            subset_csv: str | None = None,
-            features_dir: str | Path | None = None,
-            subset_fraction: float | None = None,
-            aggregate: str | None = None
-    ):
-        
-        self.features_dir = Path(features_dir) if features_dir else None
-        self.organ = organ
-        self.subset_fraction = subset_fraction
-        self.aggregate = aggregate
+    # def __init__(
+    #         self, 
+    #         metadata_csv: str,
+    #         organ: str = "Liver",
+    #         split_csv: str | None = None,
+    #         subset_csv: str | None = None,
+    #         features_dir: str | Path | None = None,
+    #         subset_fraction: float | None = None,
+    #         aggregate: str | None = None
+    # ):
 
-        self.df, self.animal_ids = self._build_dataset(metadata_csv, split_csv, subset_csv)
-        self.labels = self.df["HasHypertrophy"].to_list()
+    def __init__(self, cfg, split: str = "train"):
+        self.cfg = cfg
+        self.split = split
+
+        # config values
+        self.organ = cfg.data.organ
+        self.metadata_csv = cfg.data.metadata_csv
+        self.features_dir = Path(cfg.features.animal_dir)
+        self.aggregate = cfg.aggregation.type
+        self.subset_fraction = cfg.datasets.subset_fraction  # can be None
+
+        # determine CSV path based on split
+        if split == "subset":
+            split_csv = cfg.datasets.subset_csv
+
+        elif split in ["train", "val", "test"]:
+            split_csv = cfg.datasets.get(split)
+
+        elif split == "all":
+            split_csv = None
+
+        else:
+            raise ValueError(f"[ERROR] Unknown split: {split}")
+
+        # build final dataset dataframe
+        self.df, self.animal_ids = self._build_dataset(
+            metadata_csv=self.metadata_csv,
+            split_csv=split_csv,
+        )
+
+        # labels aligned with dataframe rows
+        self.labels = self.df["HasHypertrophy"].tolist()
 
 
-    def _build_dataset(self, metadata_csv, split_csv=None, subset_csv=None):
+    def _build_dataset(self, metadata_csv, split_csv=None):
+        """
+        Build the final dataset dataframe by loading and preprocessing metadata from a CSV file, 
+        collecting data based on the split CSV, applying a fractional subset if specified, 
+        and checking that all required features exist.
+
+        Args:
+            metadata_csv (str): Path to the metadata CSV file
+            split_csv (str | None): Path to the split CSV file (optional)
+
+        Returns:
+            df (pd.DataFrame): The final dataset dataframe
+            animal_ids (list): List of animal UIDs corresponding dataframe rows
+        """
         df = self._load_and_preprocess_metadata(metadata_csv)
-        df, ids = self._collect_data(df, split_csv, subset_csv)
-        df, ids = self._apply_fractional_subset(df, ids)
+        df= self._collect_data(df, split_csv)
+        df= self._apply_fractional_subset(df)
         self._check_features(df)
         
-        return df.reset_index(drop=True), list(ids)
+        animal_ids = df["subject_organ_UID"].astype(str).tolist()
+        return df.reset_index(drop=True), animal_ids
 
     def _load_and_preprocess_metadata(self,metadata_csv):
         """
@@ -58,31 +97,28 @@ class AnimalDataset(Dataset):
         print(f"[INFO] Loaded {len(df)} samples from {metadata_csv} for organ {self.organ}")
         return df
     
-    def _collect_data(self, df, split_csv=None, subset_csv=None):
+    def _collect_data(self, df, split_csv=None):
         """
-        Collects the data from a dataframe based on the split_csv and subset_csv.
+        Collect the relevant data from the dataframe based on the split CSV.
 
-        If split_csv is provided, it is used to split the data into training, validation, and testing sets.
-        If subset_csv is provided, it is used to create a custom balanced subset of the data.
-        If neither split_csv nor subset_csv are provided, all data is used.
+        If a split CSV is provided, the dataframe is filtered to only include
+        the animal-level IDs specified in the CSV. Otherwise, all animal-level
+        IDs from the dataframe are used.
 
         Args:
-            df (pd.DataFrame): The dataframe to collect data from.
-            split_csv (str, optional): The path to the CSV file containing the split information. Defaults to None.
-            subset_csv (str, optional): The path to the CSV file containing the subset information. Defaults to None.
+            df (pd.DataFrame): The dataframe to filter
+            split_csv (str | None): Path to the split CSV file (optional)
 
         Returns:
-            tuple: A tuple containing the collected dataframe and the set of animal-level IDs used to collect the data.
+            pd.DataFrame: The filtered dataframe
         """
         if split_csv:  # train/val/test split
             ids = self._load_ids(split_csv)
-        elif subset_csv:  # custom balanced subset
-            ids = self._load_ids(subset_csv)
         else:
             ids = set(df["subject_organ_UID"])  # use all animals
 
         df = df[df["subject_organ_UID"].astype(str).isin(ids)]
-        return df.reset_index(drop=True), ids
+        return df.reset_index(drop=True)
 
     def _load_ids(self, csv_path):
         """
@@ -102,30 +138,27 @@ class AnimalDataset(Dataset):
             raise ValueError(f"{csv_path} must contain a 'subject_organ_UID' column for animal-level training")
         return set(df["subject_organ_UID"].astype(str))
 
-    def _apply_fractional_subset(self, df, ids):
+    def _apply_fractional_subset(self, df):
         """
-        Apply a fractional subset to the provided dataframe.
+        Apply a fractional subset to the dataframe if specified.
 
-        If self.subset_fraction is None, the original dataframe is returned.
+        If `self.subset_fraction` is None, the dataframe is returned unchanged.
+        Otherwise, the dataframe is sampled at the specified fraction, and the number
+        of samples before and after the subset is printed.
 
         Args:
-            df (pd.DataFrame): The dataframe to apply the fractional subset to.
+            df (pd.DataFrame): The dataframe to subset
 
         Returns:
-            pd.DataFrame: The resulting dataframe after applying the fractional subset.
-
-        Notes:
-            The fractional subset is applied using pandas.DataFrame.sample.
-            The random_state parameter is set to 42 for reproducibility.
+            pd.DataFrame: The subset dataframe
         """
         if self.subset_fraction is None:
-            return df, ids
+            return df
         before = len(df)
         df = df.sample(frac=self.subset_fraction, random_state=42)
         after = len(df)
         print(f"Applied fractional subset of {self.subset_fraction} to {before} samples to {after} samples")
-        ids= set(df["subject_organ_UID"].astype(str))
-        return df.reset_index(drop=True), ids
+        return df.reset_index(drop=True)
     
     def _check_features(self, df):
         if self.features_dir is None:

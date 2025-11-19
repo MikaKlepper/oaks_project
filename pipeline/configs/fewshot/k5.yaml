@@ -2,4 +2,5 @@ fewshot:
   k: 5
 
 datasets:
-  subset: "{data_root}/FewShotCompoundBalanced/train_fewshot_k5.csv"
+  use_subset: true
+  subset_csv: "{data_root}/FewShotCompoundBalanced/train_fewshot_k5.csv"
