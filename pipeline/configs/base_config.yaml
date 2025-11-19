@@ -1,0 +1,46 @@
+# Base configuration for the OAKS Toxicology Pipeline
+
+experiment_root: "outputs/experiments/${features.encoder}/${probe.type}/k${fewshot.k}"
+
+data:
+  project_root: "/data/temporary/mika/repos/oaks_project"
+  data_root: "/data/temporary/mika/repos/oaks_project/splitting_data"
+
+  organ: "Liver"
+  metadata_csv: "/data/pa_cpgarchive/archives/toxicology/open-tg-gates/metadata_SD/open_tggates_master_list.csv"
+
+datasets:
+  use_subset: false
+  subset_type: train
+
+  train: "${data.data_root}/Splits/train.csv"
+  val:   "${data.data_root}/Splits/val.csv"
+  test:  "${data.data_root}/Splits/test.csv"
+
+  # few-shot gets merged in overrides
+  subset: null
+
+features:
+  encoder: "UNI"                   
+  slide_dir: "/data/toxicology/TG-GATES/liver/features/${features.encoder}"
+  animal_dir: "/data/toxicology/TG-GATES/liver/animal_features/${features.encoder}"
+  in_dim: null 
+
+aggregation:
+  type: "mean"
+
+probe:
+  type: "linear"
+  hidden_dim: null
+  layers: null
+
+fewshot:
+  k: null
+
+runtime:
+  num_workers: 4
+  batch_size: 16
+  epochs: 5
+  lr: 0.001
+
+override: []

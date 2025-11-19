@@ -5,111 +5,166 @@ from pathlib import Path
 from torch.utils.data import Dataset
 
 
-class SlideDataset(Dataset):
-    def __init__(self, metadata_csv, organ="Liver",
-                 split_csv=None, subset_csv=None,
-                 features_dir=None, subset_fraction=None, export_dir=None):
-        """
-        Dataset for animal-level (aggregated) data.
-        Uses pre-enriched metadata and filters by split or subset.
-
+class AnimalDataset(Dataset):
+    def __init__(
+            self, 
+            metadata_csv: str,
+            organ: str = "Liver",
+            split_csv: str | None = None,
+            subset_csv: str | None = None,
+            features_dir: str | Path | None = None,
+            subset_fraction: float | None = None,
+            aggregate: str | None = None
+    ):
         
-        Args:
-            metadata_csv (str): Path to metadata file (must contain subject_organ_UID, wsi_path, HasHypertrophy, Location, Severity).
-            organ (str): Organ filter (e.g., "Liver" or "Kidney").
-            split_csv (str, optional): CSV with subject_organ_UID/wsi_path for train/val/test.
-            subset_csv (str, optional): CSV with subject_organ_UID/wsi_path for filtering.
-            features_dir (str, optional): Directory with precomputed animal-level .pt features.
-            subset_fraction (float, optional): Random fraction of data to use.
-            export_dir (str, optional): Directory to export WSI paths.
-        """
         self.features_dir = Path(features_dir) if features_dir else None
+        self.organ = organ
         self.subset_fraction = subset_fraction
-        self.export_dir = Path(export_dir) if export_dir else None
+        self.aggregate = aggregate
 
-        # Load metadata and filter by organ
-        meta_df = pd.read_csv(metadata_csv)
-        meta_df = meta_df[meta_df["ORGAN"].str.lower() == organ.lower()].copy()
+        self.df, self.animal_ids = self._build_dataset(metadata_csv, split_csv, subset_csv)
+        self.labels = self.df["HasHypertrophy"].to_list()
 
-        # Add hypertrophy binary label
-        meta_df["HasHypertrophy"] = meta_df["findings"].str.contains("Hypertrophy", na=False).astype(int)
 
-        # Extract location + severity (optional info)
-        meta_df[["Location", "Severity"]] = meta_df["findings"].str.extract(
-            r"\['Hypertrophy'\s*,\s*'([^']+)'\s*,\s*'([^']+)'"
-        )
-        meta_df["Location"] = meta_df["Location"].where(meta_df["HasHypertrophy"] == 1, None)
-        meta_df["Severity"] = meta_df["Severity"].where(meta_df["HasHypertrophy"] == 1, None)
+    def _build_dataset(self, metadata_csv, split_csv=None, subset_csv=None):
+        df = self._load_and_preprocess_metadata(metadata_csv)
+        df, ids = self._collect_data(df, split_csv, subset_csv)
+        df, ids = self._apply_fractional_subset(df, ids)
+        self._check_features(df)
+        
+        return df.reset_index(drop=True), list(ids)
 
-        # Standardize columns
-        meta_df = meta_df.rename(columns={"FILE_LOCATION": "wsi_path"})
-        meta_df["subject_organ_UID"] = meta_df["subject_organ_UID"].astype(str)
+    def _load_and_preprocess_metadata(self,metadata_csv):
+        """
+        Load metadata from a CSV file and preprocess it by filtering by organ, 
+        extracting binary Hypertrophy labels, and optionally extracting location and severity 
+        information. The dataframe is then renamed to match the expected column names.
 
-        # Decide which subset of metadata to keep
+        Args:
+            metadata_csv (str): Path to the metadata CSV file
+
+        Returns:
+            pd.DataFrame: Preprocessed metadata dataframe
+        """
+        df = pd.read_csv(metadata_csv) # load metadata
+        df = df[df["ORGAN"].str.lower() == self.organ.lower()].copy() # filter by organ
+        df["HasHypertrophy"] = df["findings"].str.contains("Hypertrophy", na=False).astype(int) # make a new hypertrophy column, binary value
+        df[["Location", "Severity"]] = df["findings"].str.extract(r"\['Hypertrophy'\s*,\s*'([^']+)'\s*,\s*'([^']+)'") # extract location and severity if needed
+        df["Location"] = df["Location"].where(df["HasHypertrophy"] == 1, None) 
+        df["Severity"] = df["Severity"].where(df["HasHypertrophy"] == 1, None)
+        df = df.rename(columns={"FILE_LOCATION": "wsi_path"}) # rename and fix base paths
+        df["subject_organ_UID"] = df["subject_organ_UID"].astype(str) # convert subject_organ_UID to string
+
+        print(f"[INFO] Loaded {len(df)} samples from {metadata_csv} for organ {self.organ}")
+        return df
+    
+    def _collect_data(self, df, split_csv=None, subset_csv=None):
+        """
+        Collects the data from a dataframe based on the split_csv and subset_csv.
+
+        If split_csv is provided, it is used to split the data into training, validation, and testing sets.
+        If subset_csv is provided, it is used to create a custom balanced subset of the data.
+        If neither split_csv nor subset_csv are provided, all data is used.
+
+        Args:
+            df (pd.DataFrame): The dataframe to collect data from.
+            split_csv (str, optional): The path to the CSV file containing the split information. Defaults to None.
+            subset_csv (str, optional): The path to the CSV file containing the subset information. Defaults to None.
+
+        Returns:
+            tuple: A tuple containing the collected dataframe and the set of animal-level IDs used to collect the data.
+        """
         if split_csv:  # train/val/test split
             ids = self._load_ids(split_csv)
         elif subset_csv:  # custom balanced subset
             ids = self._load_ids(subset_csv)
         else:
-            ids = set(meta_df["subject_organ_UID"])  # use all animals
+            ids = set(df["subject_organ_UID"])  # use all animals
 
-        before = len(meta_df)
-        df = meta_df[meta_df["subject_organ_UID"].isin(ids)].copy()
-        print(f"[INFO] Filtered metadata: {before} → {len(df)}")
+        df = df[df["subject_organ_UID"].astype(str).isin(ids)]
+        return df.reset_index(drop=True), ids
 
-        # Apply fractional subset if specified
-        if self.subset_fraction is not None:
-            before = len(df)
-            df = df.sample(frac=self.subset_fraction, random_state=42)
-            print(f"[INFO] Fractional subset applied: {before} → {len(df)}")
-
-        # Filter by available animal features
-        if self.features_dir:
-            available = {p.stem for p in self.features_dir.glob("*.pt")}
-            before = len(df)
-            df = df[df["subject_organ_UID"].isin(available)]
-            print(f"[INFO] Features filtered: {before} → {len(df)}")
-
-        # Optionally export WSI paths
-        if self.export_dir:
-            self.export_dir.mkdir(parents=True, exist_ok=True)
-            base = Path(split_csv).stem if split_csv else Path(subset_csv).stem
-            suffix = f"_frac{self.subset_fraction}" if self.subset_fraction else "_full"
-            export_path = self.export_dir / f"{base}{suffix}_animal_paths.csv"
-            df[["wsi_path"]].to_csv(export_path, index=False)
-            print(f"[INFO] Exported WSI paths → {export_path}")
-
-        # Store final data
-        self.df = df
-        self.animal_ids = df["subject_organ_UID"].tolist()
-        self.targets = df["HasHypertrophy"].tolist()
-        self.paths = df["wsi_path"].tolist()
-        self.locations = df["Location"].tolist()
-        self.severities = df["Severity"].tolist()
-
-    # Helper to load IDs from split/subset CSVs
     def _load_ids(self, csv_path):
-        """Load animal UIDs from a split or subset CSV."""
+        """
+        Load animal-level IDs from a CSV file.
+
+        Args:
+            csv_path (str): Path to the CSV file containing animal-level IDs
+
+        Returns:
+            set: Set of animal-level IDs
+
+        Raises:
+            ValueError: If the CSV file does not contain a 'subject_organ_UID' column
+        """
         df = pd.read_csv(csv_path)
         if "subject_organ_UID" not in df.columns:
             raise ValueError(f"{csv_path} must contain a 'subject_organ_UID' column for animal-level training")
         return set(df["subject_organ_UID"].astype(str))
+
+    def _apply_fractional_subset(self, df, ids):
+        """
+        Apply a fractional subset to the provided dataframe.
+
+        If self.subset_fraction is None, the original dataframe is returned.
+
+        Args:
+            df (pd.DataFrame): The dataframe to apply the fractional subset to.
+
+        Returns:
+            pd.DataFrame: The resulting dataframe after applying the fractional subset.
+
+        Notes:
+            The fractional subset is applied using pandas.DataFrame.sample.
+            The random_state parameter is set to 42 for reproducibility.
+        """
+        if self.subset_fraction is None:
+            return df, ids
+        before = len(df)
+        df = df.sample(frac=self.subset_fraction, random_state=42)
+        after = len(df)
+        print(f"Applied fractional subset of {self.subset_fraction} to {before} samples to {after} samples")
+        ids= set(df["subject_organ_UID"].astype(str))
+        return df.reset_index(drop=True), ids
+    
+    def _check_features(self, df):
+        if self.features_dir is None:
+            raise ValueError("Features directory is not provided")
+        
+        available = {p.stem for p in self.features_dir.glob("*.pt")}
+        ids = set(df["subject_organ_UID"].astype(str))
+        missing = ids - available
+
+        if missing:
+            raise ValueError(f"Features for {len(missing)} animals  are not available in {self.features_dir}")
+        
+    def _get_features(self, animal_id):
+        feature_path = self.features_dir / f"{animal_id}.pt"
+        if not feature_path.exists():
+            raise FileNotFoundError(f"Missing feature file: {feature_path}")
+
+        feats = torch.load(feature_path)
+
+        # Aggregation logic
+        if self.aggregate == "mean":
+            return feats.mean(dim=0)
+        if self.aggregate in ["none", None]:
+            return feats
+
+        raise ValueError(f"Unknown aggregation method: {self.aggregate}")
+    
 
     def __len__(self):
         return len(self.animal_ids)
 
     def __getitem__(self, idx):
         animal_id = self.animal_ids[idx]
-        label = torch.tensor(self.targets[idx], dtype=torch.float32)
+        label = torch.tensor(self.labels[idx], dtype=torch.long)
+        feats = self._get_features(animal_id)
 
-        if self.features_dir:
-            feature_path = self.features_dir / f"{animal_id}.pt"
-            feats = torch.load(feature_path)
-            # average over all tiles and slides for each animal
-            feats = feats.mean(dim=0)
-            return feats, label
-        else:
-            return self.paths[idx], label
+        return feats, label
+
+
 
 
 # subset_set = SlideDataset(

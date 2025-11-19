@@ -1,0 +1,4 @@
+probe:
+  type: "mlp"
+  hidden_dim: 256
+  layers: 3

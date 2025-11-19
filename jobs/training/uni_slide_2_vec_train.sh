@@ -74,6 +74,8 @@ cd "$REPO_DIR"
 echo "Install openslide as backend"
 python3 -m pip install openslide-bin
 pip3 install git+https://github.com/lilab-stanford/MUSK.git git+https://github.com/Mahmoodlab/CONCH.git
+pip3 install fairscale
+
 
 # start backend shell, to regulary transfer outputs to temporary
 # is done every 30 minutes

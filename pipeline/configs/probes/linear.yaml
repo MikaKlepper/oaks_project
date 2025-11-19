@@ -1,0 +1,4 @@
+probe:
+  type: "linear"
+  hidden_dim: null
+  layers: 1

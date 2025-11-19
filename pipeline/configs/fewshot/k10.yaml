@@ -1,0 +1,5 @@
+fewshot:
+  k: 10
+
+datasets:
+  subset: "{data_root}/FewShotCompoundBalanced/train_fewshot_k10.csv"

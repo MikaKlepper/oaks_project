@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=40G
 #SBATCH --time=7-00:00:00
@@ -8,7 +8,7 @@
 #SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-phikonv2.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=low
+#SBATCH --qos=vram
 #SBATCH --requeue
 
 
@@ -74,6 +74,7 @@ cd "$REPO_DIR"
 echo "Install openslide as backend"
 python3 -m pip install openslide-bin
 pip3 install git+https://github.com/lilab-stanford/MUSK.git git+https://github.com/Mahmoodlab/CONCH.git
+pip3 install fairscale
 
 # start backend shell, to regulary transfer outputs to temporary
 # is done every 30 minutes
