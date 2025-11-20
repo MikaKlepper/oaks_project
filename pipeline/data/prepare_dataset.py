@@ -92,16 +92,17 @@ def _apply_subset_fraction(df, cfg):
     return df.reset_index(drop=True)
 
 
-def _validate_features(df, cfg):
+def _extract_features_dir(df, cfg):
+   
     """
-    Validate the existence of feature files for the given split.
+    Extract the feature directory for the given split.
 
     Args:
-        df (pd.DataFrame): DataFrame containing subject_organ_UID column.
-        cfg (DictConfig): OAKS configuration.
+        df (pd.DataFrame): The dataframe containing animal-level IDs.
+        cfg (DictConfig): The OAKS configuration.
 
     Returns:
-        Path: Path to the feature directory for the given split.
+        Path: The feature directory for the given split.
 
     Raises:
         ValueError: If the split is invalid or feature files are missing.
@@ -158,7 +159,7 @@ def prepare_dataset_inputs(cfg):
     split_csv = _select_split_csv(cfg)
     df = _filter_by_split(df, split_csv)
     df = _apply_subset_fraction(df, cfg)
-    features_dir = _validate_features(df, cfg)
+    features_dir = _extract_features_dir(df, cfg)
 
     slide_dir = _select_slide_dir(cfg)
 
