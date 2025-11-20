@@ -1,0 +1,6 @@
+fewshot:
+  k: 100
+
+datasets:
+  use_subset: true
+  subset_csv: "${data.data_root}/FewShotCompoundBalanced/train_fewshot_k100.csv"

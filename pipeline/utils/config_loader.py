@@ -34,6 +34,26 @@ def incorporate_cli_args(cfg, args):
     if getattr(args, "agg", "mean"):
         cli_cfg.setdefault("aggregation", {})["type"] = args.agg
         cli_cfg_entries.append(f"aggregation.type={args.agg}")
+    if getattr(args, "subset_csv", None):
+        ds = cli_cfg.setdefault("datasets", {})
+        ds["use_subset"] = True
+        ds["subset_csv"] = args.subset_csv
+        cli_cfg_entries.append(f"datasets.subset_csv={args.subset_csv}")
+    if getattr(args, "subset_fraction", None):
+        ds = cli_cfg.setdefault("datasets", {})
+        ds["use_subset"] = True
+        ds["subset_fraction"] = args.subset_fraction
+        cli_cfg_entries.append(f"datasets.subset_fraction={args.subset_fraction}")
+    if getattr(args, "stage", None):
+        if args.stage == "train":
+            cli_cfg.setdefault("datasets", {})["split"] = "train"
+            cli_cfg_entries.append("datasets.split=train")
+        elif args.stage == "eval":
+            cli_cfg.setdefault("datasets", {})["split"] = "val"
+            cli_cfg_entries.append("datasets.split=val")
+        elif args.stage == "test":
+            cli_cfg.setdefault("datasets", {})["split"] = "test"
+            cli_cfg_entries.append("datasets.split=test")
 
     if cli_cfg:
         cfg =OmegaConf.merge(cfg, cli_cfg)

@@ -3,4 +3,4 @@ fewshot:
 
 datasets:
   use_subset: true
-  subset_csv: "{data_root}/FewShotCompoundBalanced/train_fewshot_k5.csv"
+  subset_csv: "${data.data_root}/FewShotCompoundBalanced/train_fewshot_k5.csv"

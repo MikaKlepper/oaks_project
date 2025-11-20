@@ -11,21 +11,31 @@ data:
 
 datasets:
   use_subset: false
+  split: "train" # choices ["train", "val", "test"]
+
   subset_csv: null
-  subset_type: train
+  subset_fraction: null
 
   train: "${data.data_root}/Splits/train.csv"
   val:   "${data.data_root}/Splits/val.csv"
   test:  "${data.data_root}/Splits/test.csv"
 
-  # few-shot gets merged in overrides
-
+# Features
 features:
-  encoder: "UNI"    
-  features_root: "/data/toxicology/TG-GATES/liver
-  train_animal_dir: "${features.features_root}/Training_FM/${features.encoder}/animal_features"
-  val_animal_dir:   "${features.features_root}/Validation_FM/${features.encoder}/animal_features"
-  in_dim: null 
+  encoder: "UNI" #should be capitalized due to naming in savings (in my case)
+  # choices ["CONCH", "H_OPTITMUS_0","H_OPTITMUS_1", "UNI", "UNI_2", "VIRCHOW2", "KAIKO", "PHIKON", "PHIKONV2",
+  # "MIDNIGHT12K","PRISM", "RESNET50", "HIBOU_B", "HIBOU_L", "PROV_GIGAPATH_224_SLIDE",
+  # "PROV_GIGAPATH_256_SLIDE", "PROV_GIGAPATH_224_TILE", "PROV_GIGAPATH_256_TILE"]
+  features_root: "/data/temporary/toxicology/TG-GATES/liver"
+
+  train_animal_dir: "${features.features_root}/Trainings_FM/${features.encoder}/animal_features"
+  train_slide_dir:   "${features.features_root}/Trainings_FM/${features.encoder}/features"
+  val_animal_dir:   "${features.features_root}/Validations_FM/${features.encoder}/animal_features"
+  val_slide_dir:     "${features.features_root}/Validations_FM/${features.encoder}/slide_features"
+  test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
+  test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/slide_features"
+
+  embed_dim: null
 
 aggregation:
   type: "mean"

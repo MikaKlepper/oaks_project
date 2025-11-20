@@ -1,2 +1,2 @@
 features:
-  in_dim: 512
+  embed_dim: 512

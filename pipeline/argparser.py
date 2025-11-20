@@ -12,7 +12,7 @@ def get_args():
     # Stage to run
     parser.add_argument("--stage", type=str, required=False,
         choices=[
-            "split", "fewshot", "check", "aggregate",
+            "split", "check", "aggregate",
             "train", "eval", "all"
         ],
         help="Pipeline stage to execute"
@@ -35,6 +35,20 @@ def get_args():
     parser.add_argument("--agg", type=str, default=None,
         choices=["mean", "max", "min", "sum"],
         help="Aggregation type")
+
+    # Optional custom subset CSV
+    parser.add_argument( "--subset_csv", type=str, default=None,
+                         help="Optional custom subset CSV to use instead of train/val/test"
+    )
+
+    # Optional fractional subset
+    parser.add_argument(
+        "--subset_fraction",
+        type=float,
+        default=None,
+        help="Optional fraction of the split to use (e.g., 0.1 for 10%)"
+    )
+
 
     # Eval checkpoint
     parser.add_argument("--model_path", type=str, default=None,
