@@ -4,39 +4,47 @@ import pandas as pd
 from pathlib import Path
 from torch.utils.data import Dataset
 
-
-class AnimalDataset(Dataset):
+class ToxicologyDataset(Dataset):
     def __init__(self, prepared):
-     """
+        """
         Args:
             prepared (dict):
                 {
-                    "df": DataFrame,
-                    "animal_ids": list,
-                    "labels": list,
-                    "slide_dir": Path,
-                    "features_dir": Path,
-                    "split": str,
-                    "aggregate": str,
-                    "embed_dim": int
+                    "data": {
+                        "df": DataFrame,
+                        "ids": list,
+                        "labels": list,
+                        "slide_dir": Path,
+                        "features_dir": Path,
+                        "split": str,
+                        "aggregate": str,
+                        "embed_dim": int,
+                        "features_type": str,
+                        ... not used
+                    },
+                    "runtime": {...}   # not used by dataset
                 }
         """
-     self.df = prepared["df"]
-     self.animal_ids = prepared["animal_ids"]
-     self.labels = prepared["labels"]
-     self.features_dir = Path(prepared["features_dir"])
-     self.aggregate = prepared["aggregate"]
-     self.embed_dim = prepared["embed_dim"]
+        
+        data = prepared["data"] 
 
-     # quick check
-     if len(self.animal_ids) != len(self.labels):
-         raise ValueError("Animal IDs and labels must have the same length.")
-     
+        self.df = data["df"]
+        self.ids = data["ids"]
+        self.labels = data["labels"]
+        self.features_dir = Path(data["features_dir"])
+        self.slide_dir = Path(data["slide_dir"])
+        self.aggregate = data["aggregate"]
+        self.embed_dim = data["embed_dim"]
+        self.features_type = data["features_type"]
+
+        # quick check
+        if len(self.ids) != len(self.labels):
+            raise ValueError("Animal IDs and labels must have the same length.")
   
     def __len__(self):
-        return len(self.animal_ids)
+        return len(self.ids)
 
-    def _load_features(self, animal_id):
+    def _load_features(self, id):
         """
         Load the features for a given animal ID.
 
@@ -57,7 +65,7 @@ class AnimalDataset(Dataset):
         ValueError
             If the aggregation type is unknown.
         """
-        fpath = self.features_dir / f"{animal_id}.pt"
+        fpath = self.features_dir / f"{id}.pt"
         if not fpath.exists():
             raise FileNotFoundError(f"Missing feature file: {fpath}")
 
@@ -82,8 +90,8 @@ class AnimalDataset(Dataset):
                 feats (Tensor): The features for the given animal.
                 label (Tensor): The label for the given animal.
         """
-        animal_id = self.animal_ids[idx]
-        feats = self._load_features(animal_id)
+        id = self.ids[idx]
+        feats = self._load_features(id)
         if feats.shape[0] != self.embed_dim:
             raise ValueError(f"Expected {self.embed_dim} features, but got {feats.shape[0]}")
         

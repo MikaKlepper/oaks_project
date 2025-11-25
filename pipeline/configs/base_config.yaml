@@ -15,6 +15,8 @@ datasets:
 
   subset_csv: null
   subset_fraction: null
+  eval_subset_csv: null
+ 
 
   train: "${data.data_root}/Splits/train.csv"
   val:   "${data.data_root}/Splits/val.csv"
@@ -28,12 +30,14 @@ features:
   # "PROV_GIGAPATH_256_SLIDE", "PROV_GIGAPATH_224_TILE", "PROV_GIGAPATH_256_TILE"]
   features_root: "/data/temporary/toxicology/TG-GATES/liver"
 
-  train_animal_dir: "${features.features_root}/Trainings_FM/${features.encoder}/animal_features"
-  train_slide_dir:   "${features.features_root}/Trainings_FM/${features.encoder}/features"
-  val_animal_dir:   "${features.features_root}/Validations_FM/${features.encoder}/animal_features"
-  val_slide_dir:     "${features.features_root}/Validations_FM/${features.encoder}/slide_features"
-  test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
-  test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/slide_features"
+  type: "animal" # choices ["animal", "slide"]
+
+  # train_animal_dir: "${features.features_root}/Trainings_FM/${features.encoder}/animal_features"
+  # train_slide_dir:   "${features.features_root}/Trainings_FM/${features.encoder}/features"
+  # val_animal_dir:   "${features.features_root}/Validations_FM/${features.encoder}/animal_features"
+  # val_slide_dir:     "${features.features_root}/Validations_FM/${features.encoder}/features"
+  # test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
+  # test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/features"
 
   embed_dim: null
 
@@ -54,4 +58,10 @@ runtime:
   epochs: 5
   lr: 0.001
 
-override: []
+  optimizer: "adam"        # "adam", "adamw", "sgd", "rmsprop"
+  weight_decay: 0.0
+  momentum: 0.9            # for SGD
+  loss: "crossentropy"     # "crossentropy", "mse", "bce"
+  device: "cuda"           # also works with "cpu" or "mps"
+
+user_input: []

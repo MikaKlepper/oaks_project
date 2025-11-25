@@ -51,26 +51,46 @@ def _select_split_csv(cfg):
         return cfg.datasets[cfg.datasets.split]
 
 
-def _filter_by_split(df, split_csv):
-    """
-    Filter the dataframe to only include the animal-level IDs specified in the split CSV.
+# def _filter_by_split(df, split_csv):
+#     """
+#     Filter the dataframe to only include the animal-level IDs specified in the split CSV.
 
-    If the split CSV is None, the dataframe is returned as is. Otherwise, the dataframe
-    is filtered to only include the animal-level IDs specified in the split CSV.
+#     If the split CSV is None, the dataframe is returned as is. Otherwise, the dataframe
+#     is filtered to only include the animal-level IDs specified in the split CSV.
 
-    Args:
-        df (pd.DataFrame): The dataframe to filter
-        split_csv (str | None): Path to the split CSV file (optional)
+#     Args:
+#         df (pd.DataFrame): The dataframe to filter
+#         split_csv (str | None): Path to the split CSV file (optional)
 
-    Returns:
-        pd.DataFrame: The filtered dataframe
-    """
+#     Returns:
+#         pd.DataFrame: The filtered dataframe
+#     """
+#     if split_csv is None:
+#         return df
+#     ids = pd.read_csv(split_csv)["subject_organ_UID"].astype(str).tolist()
+#     return df[df["subject_organ_UID"].astype(str).isin(ids)].reset_index(drop=True)
+
+def _filter_by_split(df, split_csv, cfg):
     if split_csv is None:
         return df
-    ids = pd.read_csv(split_csv)["subject_organ_UID"].astype(str).tolist()
-    return df[df["subject_organ_UID"].astype(str).isin(ids)].reset_index(drop=True)
 
+    split_df = pd.read_csv(split_csv)
+    ftype = cfg.features.type   # "animal" or "slide"
 
+    if ftype == "animal":
+        if "subject_organ_UID" not in split_df.columns:
+            raise ValueError(f"{split_csv} must contain subject_organ_UID for animal mode")
+        ids = split_df["subject_organ_UID"].astype(str).tolist()
+        return df[df["subject_organ_UID"].astype(str).isin(ids)].reset_index(drop=True)
+
+    elif ftype == "slide":
+        if "slide_id" not in split_df.columns:
+            raise ValueError(f"{split_csv} must contain slide_id for slide mode")
+        ids = split_df["slide_id"].astype(str).tolist()
+        return df[df["slide_id"].astype(str).isin(ids)].reset_index(drop=True)
+
+    else:
+        raise ValueError(f"Unknown features.type: {ftype}")
 
 def _apply_subset_fraction(df, cfg):
     """
@@ -92,53 +112,94 @@ def _apply_subset_fraction(df, cfg):
     return df.reset_index(drop=True)
 
 
-def _extract_features_dir(df, cfg):
+# def _extract_features_dir(df, cfg):
    
+#     """
+#     Extract the feature directory for the given split.
+
+#     Args:
+#         df (pd.DataFrame): The dataframe containing animal-level IDs.
+#         cfg (DictConfig): The OAKS configuration.
+
+#     Returns:
+#         Path: The feature directory for the given split.
+
+#     Raises:
+#         ValueError: If the split is invalid or feature files are missing.
+#     """
+#     split = cfg.datasets.split
+
+#     feature_dirs = {
+#         "train": cfg.features.train_animal_dir,
+#         "val":   cfg.features.val_animal_dir,
+#         "test":  cfg.features.test_animal_dir,
+#     }
+
+#     if split not in feature_dirs:
+#         raise ValueError(f"Invalid split: {split}")
+#     fdir = Path(feature_dirs[split])
+#     # available = {p.stem for p in fdir.glob("*.pt")}
+#     # expected = set(df["subject_organ_UID"].astype(str))
+
+#     # missing = expected - available
+#     # if missing:
+#     #     raise ValueError(f"Missing {len(missing)} feature files in {fdir}")
+       
+
+#     return fdir
+
+# def _select_slide_dir(cfg):
+#     split = cfg.datasets.split
+#     slide_dirs = {
+#         "train": cfg.features.train_slide_dir,
+#         "val":   cfg.features.val_slide_dir,
+#         "test":  cfg.features.test_slide_dir,
+        
+#     }
+#     if split not in slide_dirs:
+#         raise ValueError(f"Invalid split '{split}'. Expected train/val/test.")
+#     return Path(slide_dirs[split])
+
+def _select_feature_dirs(cfg):
     """
-    Extract the feature directory for the given split.
+    Select the feature directories based on the given split.
 
     Args:
-        df (pd.DataFrame): The dataframe containing animal-level IDs.
         cfg (DictConfig): The OAKS configuration.
 
     Returns:
-        Path: The feature directory for the given split.
+        dict: A dictionary containing the feature directories for the given split.
+            The dictionary has the following keys:
+                - animal_dir: The directory containing the animal-level features.
+                - slide_dir: The directory containing the slide-level features.
 
     Raises:
         ValueError: If the split is invalid or feature files are missing.
     """
     split = cfg.datasets.split
 
-    feature_dirs = {
+    animal_dirs = {
         "train": cfg.features.train_animal_dir,
         "val":   cfg.features.val_animal_dir,
         "test":  cfg.features.test_animal_dir,
     }
 
-    if split not in feature_dirs:
-        raise ValueError(f"Invalid split: {split}")
-    fdir = Path(feature_dirs[split])
-    # available = {p.stem for p in fdir.glob("*.pt")}
-    # expected = set(df["subject_organ_UID"].astype(str))
-
-    # missing = expected - available
-    # if missing:
-    #     raise ValueError(f"Missing {len(missing)} feature files in {fdir}")
-       
-
-    return fdir
-
-def _select_slide_dir(cfg):
-    split = cfg.datasets.split
     slide_dirs = {
         "train": cfg.features.train_slide_dir,
         "val":   cfg.features.val_slide_dir,
         "test":  cfg.features.test_slide_dir,
-        
     }
-    if split not in slide_dirs:
+
+    if split not in animal_dirs or split not in slide_dirs:
         raise ValueError(f"Invalid split '{split}'. Expected train/val/test.")
-    return Path(slide_dirs[split])
+
+    # always return both
+    return {
+        "animal_dir": Path(animal_dirs[split]),
+        "slide_dir": Path(slide_dirs[split]),
+    }
+
+    
 
 def prepare_dataset_inputs(cfg):
   
@@ -157,22 +218,58 @@ def prepare_dataset_inputs(cfg):
     """
     df = _load_metadata(cfg)
     split_csv = _select_split_csv(cfg)
-    df = _filter_by_split(df, split_csv)
+    df = _filter_by_split(df, split_csv, cfg)
     df = _apply_subset_fraction(df, cfg)
-    features_dir = _extract_features_dir(df, cfg)
+    # features_dir = _extract_features_dir(df, cfg)
 
-    slide_dir = _select_slide_dir(cfg)
+    # slide_dir = _select_slide_dir(cfg)
+    dirs = _select_feature_dirs(cfg)
 
-    animal_ids = df["subject_organ_UID"].tolist()
+    if cfg.features.type == "animal":
+        ids = df["subject_organ_UID"].tolist()
+    else:
+        ids = df["slide_id"].tolist()
+    
+    #animal_ids = df["subject_organ_UID"].tolist()
     labels = df["HasHypertrophy"].tolist()
 
+    # return {
+    #     "df": df,
+    #     "ids": ids,
+    #     "labels": labels,   
+    #     "slide_dir": dirs["slide_dir"],
+    #     "features_dir": dirs["animal_dir"] if cfg.features.type == "animal" else dirs["slide_dir"],
+    #     "split": cfg.datasets.split,
+    #     "aggregate": cfg.aggregation.type,
+    #     "embed_dim":cfg.features.embed_dim,
+    #     "features_type": cfg.features.type
+    # }
+
     return {
-        "df": df,
-        "animal_ids": animal_ids,
-        "labels": labels,   
-        "slide_dir": slide_dir,
-        "features_dir": features_dir,
-        "split": cfg.datasets.split,
-        "aggregate": cfg.aggregation.type,
-        "embed_dim":cfg.features.embed_dim
+        "data":{
+            "df": df,
+            "ids": ids,
+            "labels": labels,
+            "num_classes": 2,
+            "slide_dir": dirs["slide_dir"],
+            "features_dir": dirs["animal_dir"] if cfg.features.type == "animal" else dirs["slide_dir"],
+            "split": cfg.datasets.split,
+            "aggregate": cfg.aggregation.type,
+            "embed_dim": cfg.features.embed_dim,
+            "features_type": cfg.features.type,
+            "subset_csv": cfg.datasets.subset_csv if cfg.datasets.use_subset else None,
+            "train_csv": cfg.datasets.train,
+            "val_csv": cfg.datasets.val,
+            "test_csv": cfg.datasets.test,
+        },
+        "runtime": {
+            "batch_size": cfg.runtime.batch_size,
+            "epochs": cfg.runtime.epochs,
+            "lr": cfg.runtime.lr,
+            "optimizer": cfg.runtime.optimizer,
+            "weight_decay": cfg.runtime.weight_decay,
+            "momentum": cfg.runtime.momentum,
+            "loss": cfg.runtime.loss,
+            "device": cfg.runtime.device,
+        }
     }

@@ -21,10 +21,12 @@ def group_features_by_animal(prepared):
         A dictionary containing summary statistics about the aggregation process.
     """
 
-    df = prepared["df"]
-    animal_dir = prepared["features_dir"]
-    slide_dir = prepared["slide_dir"]
-    split = prepared["split"]
+    data = prepared["data"]   
+    df = data["df"]
+    animal_dir = data["features_dir"]
+    slide_dir = data["slide_dir"]
+    split = data["split"]
+
 
     print(f"[INFO] Creating animal features for split: {split}")
     print(f"[INFO] Slide feature directory:  {slide_dir}")

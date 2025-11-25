@@ -13,7 +13,7 @@ def get_args():
     parser.add_argument("--stage", type=str, required=False,
         choices=[
             "split", "check", "aggregate",
-            "train", "eval", "all"
+            "train", "eval", "test", "all"
         ],
         help="Pipeline stage to execute"
     )
@@ -25,6 +25,12 @@ def get_args():
     parser.add_argument("--probe", type=str, default=None,
         choices=["linear", "mlp", "knn", "logreg", "svm_linear", "svm_rbf"],
         help="Probe type override"
+    )
+
+    # feature type, animal or slide
+    parser.add_argument("--ftype", type=str, default=None,
+        choices=["animal", "slide"],
+        help="Type of features to use"
     )
 
     # Few-shot K
@@ -40,15 +46,22 @@ def get_args():
     parser.add_argument( "--subset_csv", type=str, default=None,
                          help="Optional custom subset CSV to use instead of train/val/test"
     )
+    
+    # Training hyperparameters
+    parser.add_argument("--optimizer", type=str, help="Override optimizer type: adam, adamw, sgd, rmsprop")
+    parser.add_argument("--loss", type=str, help="Loss function: crossentropy, mse, bce")
+    parser.add_argument("--weight_decay", type=float, help="Weight decay for optimizer")
+    parser.add_argument("--momentum", type=float, help="Momentum for SGD/RMSProp")
+    parser.add_argument("--device", type=str, help="Training device: cpu, cuda, mps")
 
-    # Optional fractional subset
+
+        # Optional fractional subset
     parser.add_argument(
         "--subset_fraction",
         type=float,
         default=None,
         help="Optional fraction of the split to use (e.g., 0.1 for 10%)"
     )
-
 
     # Eval checkpoint
     parser.add_argument("--model_path", type=str, default=None,
