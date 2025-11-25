@@ -32,6 +32,14 @@ def incorporate_cli_args(cfg, args):
     if getattr(args, "probe", None):
         cli_cfg.setdefault("probe", {})["type"] = args.probe
         cli_cfg_entries.append(f"probe.type={args.probe}")
+    
+    if getattr(args, "hidden_dim", None) is not None:
+        cli_cfg.setdefault("probe", {})["hidden_dim"] = args.hidden_dim
+        cli_cfg_entries.append(f"probe.hidden_dim={args.hidden_dim}")
+
+    if getattr(args, "layers", None) is not None:
+        cli_cfg.setdefault("probe", {})["layers"] = args.layers
+        cli_cfg_entries.append(f"probe.layers={args.layers}")
 
     # store k but DO NOT assign default subset yet
     k = getattr(args, "k", None)
@@ -47,22 +55,14 @@ def incorporate_cli_args(cfg, args):
         cli_cfg.setdefault("features", {})["type"] = args.ftype
         cli_cfg_entries.append(f"features.type={args.ftype}")
 
-    # set training hyperparameters
-    if getattr(args, "optimizer", None):
-        cli_cfg.setdefault("train", {})["optimizer"] = args.optimizer
-        cli_cfg_entries.append(f"train.optimizer={args.optimizer}")
-    if getattr(args, "loss", None):
-        cli_cfg.setdefault("train", {})["loss"] = args.loss
-        cli_cfg_entries.append(f"train.loss={args.loss}")
-    if getattr(args, "weight_decay", None) is not None:
-        cli_cfg.setdefault("train", {})["weight_decay"] = args.weight_decay
-        cli_cfg_entries.append(f"train.weight_decay={args.weight_decay}")
-    if getattr(args, "momentum", None) is not None:
-        cli_cfg.setdefault("train", {})["momentum"] = args.momentum
-        cli_cfg_entries.append(f"train.momentum={args.momentum}")
-    if getattr(args, "device", None):
-        cli_cfg.setdefault("train", {})["device"] = args.device
-        cli_cfg_entries.append(f"train.device={args.device}")
+    rt = cli_cfg.setdefault("runtime", {})
+
+    for name in ["optimizer", "loss", "device", "lr", "batch_size", "epochs",
+                 "momentum", "weight_decay"]:
+        value = getattr(args, name, None)
+        if value is not None:
+            rt[name] = value
+            cli_cfg_entries.append(f"runtime.{name}={value}")
 
     # handle dataset subset selection with the following
     # priority:

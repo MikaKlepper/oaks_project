@@ -59,3 +59,41 @@ if __name__ == "__main__":
         do_eval=not args.no_eval,
         do_subset=args.subset
     )
+
+
+
+# pipeline/main.py
+
+import logging
+from pathlib import Path
+
+from argparser import get_args
+from utils.config_loader import load_merged_config
+from logger import setup_logger
+from train import run_train
+from eval import run_eval
+from test import run_test
+
+
+def main():
+    args = get_args()
+    cfg, _ = load_merged_config(args.config, args)
+
+    exp_root = Path(cfg.experiment_root)
+    setup_logger(exp_root)
+
+    stage = getattr(args, "stage", None) or cfg.datasets.split
+    logging.info(f"[Main] Stage: {stage}")
+
+    if stage == "train":
+        run_train(cfg)
+    elif stage in ["val", "eval"]:
+        run_eval(cfg)
+    elif stage == "test":
+        run_test(cfg)
+    else:
+        raise ValueError(f"Unknown stage: {stage}")
+
+
+if __name__ == "__main__":
+    main()

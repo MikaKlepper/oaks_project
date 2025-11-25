@@ -250,7 +250,7 @@ def prepare_dataset_inputs(cfg):
             "df": df,
             "ids": ids,
             "labels": labels,
-            "num_classes": 2,
+            "num_classes": len(set(labels)),
             "slide_dir": dirs["slide_dir"],
             "features_dir": dirs["animal_dir"] if cfg.features.type == "animal" else dirs["slide_dir"],
             "split": cfg.datasets.split,
@@ -271,5 +271,10 @@ def prepare_dataset_inputs(cfg):
             "momentum": cfg.runtime.momentum,
             "loss": cfg.runtime.loss,
             "device": cfg.runtime.device,
+        },
+        "probe": {
+            "type": cfg.probe.type,
+            "hidden_dim": cfg.probe.hidden_dim,
+            "num_layers": cfg.probe.num_layers,
         }
     }

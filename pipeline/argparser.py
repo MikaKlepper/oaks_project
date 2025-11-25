@@ -26,6 +26,12 @@ def get_args():
         choices=["linear", "mlp", "knn", "logreg", "svm_linear", "svm_rbf"],
         help="Probe type override"
     )
+       # Architecture hyperparameters
+    parser.add_argument("--hidden_dim", type=int, default=None,
+        help="Hidden dimension for MLP probe")
+
+    parser.add_argument("--layers", type=int, default=None,
+        help="Number of MLP layers")
 
     # feature type, animal or slide
     parser.add_argument("--ftype", type=str, default=None,
@@ -52,8 +58,11 @@ def get_args():
     parser.add_argument("--loss", type=str, help="Loss function: crossentropy, mse, bce")
     parser.add_argument("--weight_decay", type=float, help="Weight decay for optimizer")
     parser.add_argument("--momentum", type=float, help="Momentum for SGD/RMSProp")
+    parser.add_argument("--lr", type=float,help="Learning rate override")
+    parser.add_argument("--batch_size", type=int, help="Batch size override")
+    parser.add_argument("--epochs", type=int,help="Epoch override")
     parser.add_argument("--device", type=str, help="Training device: cpu, cuda, mps")
-
+    
 
         # Optional fractional subset
     parser.add_argument(
