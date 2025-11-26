@@ -276,5 +276,6 @@ def prepare_dataset_inputs(cfg):
             "type": cfg.probe.type,
             "hidden_dim": cfg.probe.hidden_dim,
             "num_layers": cfg.probe.num_layers,
+            "knn_neighbors": cfg.probe.knn_neighbors,
         }
     }

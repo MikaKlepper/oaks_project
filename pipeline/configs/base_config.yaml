@@ -48,6 +48,7 @@ probe:
   type: "linear"
   hidden_dim: null
   layers: null
+  knn_neighbors: 5
 
 fewshot:
   k: null
