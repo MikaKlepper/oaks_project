@@ -261,6 +261,7 @@ def prepare_dataset_inputs(cfg):
             "train_csv": cfg.datasets.train,
             "val_csv": cfg.datasets.val,
             "test_csv": cfg.datasets.test,
+            "use_cache": cfg.features.use_cache
         },
         "runtime": {
             "batch_size": cfg.runtime.batch_size,

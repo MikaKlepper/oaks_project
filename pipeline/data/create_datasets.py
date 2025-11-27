@@ -37,6 +37,22 @@ class ToxicologyDataset(Dataset):
         self.embed_dim = data["embed_dim"]
         self.features_type = data["features_type"]
 
+        self.use_cache = data["use_cache"] # store featurs in memory if needed
+        self.cache = {}  # id -> features tensor
+
+        if self.use_cache:
+            print(f"[Dataset] Preloading {len(self.ids)} features into RAM...")
+            for id in self.ids:
+                fpath = self.features_dir / f"{id}.pt"
+                if not fpath.exists():
+                    raise FileNotFoundError(f"Missing feature file: {fpath}")
+                feats = torch.load(fpath)
+                if self.aggregate == "mean":
+                    feats = feats.mean(dim=0)
+                self.cache[id] = feats
+            print(f"[Dataset] Cached {len(self.cache)} tensors in RAM.")
+
+
         # quick check
         if len(self.ids) != len(self.labels):
             raise ValueError("Animal IDs and labels must have the same length.")
@@ -65,6 +81,12 @@ class ToxicologyDataset(Dataset):
         ValueError
             If the aggregation type is unknown.
         """
+
+        # check cache first
+        if self.use_cache and id in self.cache:
+            return self.cache[id]
+        
+
         fpath = self.features_dir / f"{id}.pt"
         if not fpath.exists():
             raise FileNotFoundError(f"Missing feature file: {fpath}")

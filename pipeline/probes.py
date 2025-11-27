@@ -18,14 +18,16 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import LinearSVC, SVC
 
 
+
+
 # asbtract class all probes should inherit from
 class BaseProbe(ABC):
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray):
+    def fit(self, X: Union[np.ndarray, torch.Tensor], y: Union[np.ndarray, torch.Tensor]):
         pass
     
     @abstractmethod
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         pass
 
     @abstractmethod
@@ -121,11 +123,19 @@ class TorchProbe(BaseProbe):
         self.model = model.to(self.cfg.device)
         self.criterion = self.cfg.make_loss()
         self.optimizer = self.cfg.make_optimizer(self.model.parameters())
+    
+    def _to_tensor(self, x: Union[np.ndarray, torch.Tensor], dtype=torch.dtype) -> torch.Tensor:
+        if isinstance(x, torch.Tensor):
+            return x.to(dtype=dtype, device=self.cfg.device)
+        return torch.tensor(x, dtype=dtype, device=self.cfg.device)
         
-    def fit(self, X: np.ndarray, y: np.ndarray):
+    def fit(self, X: Union[np.ndarray, torch.Tensor], y: Union[np.ndarray, torch.Tensor]):
         device = self.cfg.device
-        dataset = TensorDataset(torch.tensor(X, dtype=torch.float32).to(device), torch.tensor(y, dtype=torch.long).to(device))
+        X_t = self._to_tensor(X, dtype=torch.float32)
+        y_t = self._to_tensor(y, dtype=torch.long)
+        dataset = TensorDataset(X_t, y_t)
         dataloader = DataLoader(dataset, batch_size=self.cfg.batch_size, shuffle=True)
+
         
         n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         logging.info(
@@ -164,10 +174,9 @@ class TorchProbe(BaseProbe):
                 f"Restored best model from epoch {best_epoch+1} with loss {best_loss:.4f}"
             )
         
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         device = self.cfg.device
-        X_t = torch.tensor(X, dtype=torch.float32).to(device)
+        X_t = self._to_tensor(X, dtype=torch.float32)
 
         self.model.eval()
         with torch.no_grad():
@@ -176,9 +185,9 @@ class TorchProbe(BaseProbe):
 
         return preds.cpu().numpy()
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         device = self.cfg.device
-        X_t = torch.tensor(X, dtype=torch.float32).to(device)
+        X_t = self._to_tensor(X, dtype=torch.float32)
 
         self.model.eval()
         with torch.no_grad():
@@ -204,15 +213,21 @@ class SklearnProbe(BaseProbe):
     def __init__(self, model):
         self.model = model
 
-    def fit(self, X: np.ndarray, y: np.ndarray):
-        self.model.fit(X, y)
+    def _ensure_numpy(self, x: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        if isinstance(x, torch.Tensor):
+            return x.cpu().numpy()
+        return x
+    
+    def fit(self, X: Union[np.ndarray, torch.Tensor], y: Union[np.ndarray, torch.Tensor]):
+        logging.info(f"[SklearnProbe] Fitting {self.model.__class__.__name__}")
+        self.model.fit(self._ensure_numpy(X), self._ensure_numpy(y))
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        return self.model.predict(X)
+    def predict(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        return self.model.predict(self._ensure_numpy(X))
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         if hasattr(self.model, "predict_proba"):
-            return self.model.predict_proba(X)
+            return self.model.predict_proba(self._ensure_numpy(X))
         else:
             raise NotImplementedError(f"{self.model.__class__.__name__} does not implement predict_proba method.")
 
@@ -230,30 +245,31 @@ class SklearnProbe(BaseProbe):
 # helper to get default probe path
 def default_probe_path(prepared, exp_root: Union[str, Path], is_torch: bool) -> Path:
     exp_root = Path(exp_root)
-    probe_name = str(prepared.probe.type).lower()
+    probe_name = str(prepared["probe"]["type"]).lower()
     ext = "pt" if is_torch else "joblib"
     return exp_root / f"probe_{probe_name}.{ext}"
     
 def build_probe(prepared, input_dim: int, num_classes: int) -> BaseProbe:
-    probe_type = str(prepared.probe.type).lower()
+    probe_type = str(prepared["probe"]["type"]).lower()
 
-    # device + runtime hyperparams
-    device = getattr(prepared.runtime, "device", None)
+    # device
+    device = prepared["runtime"]["device"]
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    # Torch config
     torch_cfg = TorchProbeConfig(
         probe_type=probe_type,
-        hidden_dim=getattr(prepared.probe, "hidden_dim", 256) or 256,
-        num_layers=getattr(prepared.probe, "layers", 3) or 3,
-        epochs=prepared.runtime.epochs,
-        lr=prepared.runtime.lr,
-        batch_size=prepared.runtime.batch_size,
+        hidden_dim=prepared["probe"]["hidden_dim"],
+        num_layers=prepared["probe"]["num_layers"],
+        epochs=prepared["runtime"]["epochs"],
+        lr=prepared["runtime"]["lr"],
+        batch_size=prepared["runtime"]["batch_size"],
         device=device,
-        optimizer=getattr(prepared.runtime, "optimizer", "adam"),
-        weight_decay=getattr(prepared.runtime, "weight_decay", 0.0),
-        momentum=getattr(prepared.runtime, "momentum", 0.9),
-        loss=getattr(prepared.runtime, "loss", "crossentropy"),
+        optimizer=prepared["runtime"]["optimizer"],
+        weight_decay=prepared["runtime"]["weight_decay"],
+        momentum=prepared["runtime"]["momentum"],
+        loss=prepared["runtime"]["loss"],
     )
 
     # Torch probes
@@ -279,7 +295,7 @@ def build_probe(prepared, input_dim: int, num_classes: int) -> BaseProbe:
         return SklearnProbe(model)
 
     if probe_type == "knn":
-        k = getattr(prepared.probe, "knn_neighbors",5)
+        k = prepared["probe"]["knn_neighbors"]
         model = KNeighborsClassifier(n_neighbors=k, n_jobs=-1)
         return SklearnProbe(model)
 

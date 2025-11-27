@@ -38,7 +38,7 @@ features:
   # val_slide_dir:     "${features.features_root}/Validations_FM/${features.encoder}/features"
   # test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
   # test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/features"
-
+  use_cache: true
   embed_dim: null
 
 aggregation:
@@ -47,7 +47,7 @@ aggregation:
 probe:
   type: "linear"
   hidden_dim: null
-  layers: null
+  num_layers: null
   knn_neighbors: 5
 
 fewshot:
@@ -56,11 +56,11 @@ fewshot:
 runtime:
   num_workers: 4
   batch_size: 16
-  epochs: 5
-  lr: 0.001
+  epochs: 60
+  lr: 1e-4
 
-  optimizer: "adam"        # "adam", "adamw", "sgd", "rmsprop"
-  weight_decay: 0.0
+  optimizer: "adamw"        # "adam", "adamw", "sgd", "rmsprop"
+  weight_decay: 1e-4
   momentum: 0.9            # for SGD
   loss: "crossentropy"     # "crossentropy", "mse", "bce"
   device: "cuda"           # also works with "cpu" or "mps"

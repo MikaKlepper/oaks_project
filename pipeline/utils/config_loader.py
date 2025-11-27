@@ -101,6 +101,7 @@ def incorporate_cli_args(cfg, args):
 
         elif stage == "all":
             ds["split"] = "all"
+            ds["use_subset"] = True
             cli_cfg_entries.append("datasets.split=all")
         
     if k is not None:

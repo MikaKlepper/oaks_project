@@ -1,98 +1,57 @@
-# main.py
-# Orchestrates the whole pipeline: splitting -> training -> evaluation.
-
-import argparse
-import yaml
-from pathlib import Path
-
-from splitting import main as run_splitting
-from train import run_training
-from test_evaluate import run_evaluation
-from argparser import get_args
-from utils.create_subset import create_balanced_subset
-
-
-def main(config_path, do_split=False, do_train=True, do_eval=True, do_subset=False):
-    # load config
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    print(f"[INFO] Loaded config from {config_path}")
-
-    # splitting only if requested or if CSVs don't exist
-    # Use the paths defined in YAML instead of hardcoding train/val/test
-    train_csv = Path(config["datasets"]["train"])
-    val_csv   = Path(config["datasets"]["val"])
-    test_csv  = Path(config["datasets"]["test"])
-
-    if do_split or not (train_csv.exists() and val_csv.exists() and test_csv.exists()):
-        print("[INFO] Running data splitting...")
-        run_splitting(config_path)
-        return  # exit after splitting
-    else:
-        print("[INFO] Found existing splits, skipping splitting.")
-
-
-    # creating subset if requested
-    if do_subset or config.get("subset_creation", {}).get("enabled", False):
-        create_balanced_subset(config)
-        return
-    
-    # training
-    if do_train:
-        print("[INFO] Starting training...")
-        run_training(config)
-
-    # evaluation
-    if do_eval:
-        print("[INFO] Starting evaluation...")
-        run_evaluation(config, model_path="outputs/slide_classifier.pth")
-
-
-if __name__ == "__main__":
-    args = get_args()
-
-    main(
-        config_path=args.config,
-        do_split=args.split,
-        do_train=not args.no_train,
-        do_eval=not args.no_eval,
-        do_subset=args.subset
-    )
-
-
-
 # pipeline/main.py
 
 import logging
-from pathlib import Path
-
 from argparser import get_args
 from utils.config_loader import load_merged_config
 from logger import setup_logger
 from train import run_train
 from eval import run_eval
-from test import run_test
+from copy import deepcopy
 
 
 def main():
+    # ------------- 1) Parse CLI Arguments --------------------
     args = get_args()
+
+    # ------------- 2) Load merged config (config YAML + CLI overrides) -----
     cfg, _ = load_merged_config(args.config, args)
 
-    exp_root = Path(cfg.experiment_root)
-    setup_logger(exp_root)
+    # ------------- 3) Setup logging --------------------------
+    setup_logger(cfg.experiment_root)
+    logging.info("========== MAIN STAGE ==========")
+    logging.info(f"[Main] Stage selected: {cfg.datasets.split}")
 
-    stage = getattr(args, "stage", None) or cfg.datasets.split
-    logging.info(f"[Main] Stage: {stage}")
+    # ------------- 4) Execute stage --------------------------
+    stage = cfg.datasets.split.lower()
 
     if stage == "train":
+        logging.info("[Main] Running TRAIN stage")
         run_train(cfg)
-    elif stage in ["val", "eval"]:
+
+    elif stage == "val":
+        logging.info("[Main] Running EVAL stage")
         run_eval(cfg)
-    elif stage == "test":
-        run_test(cfg)
+
+    elif stage == "all":
+        logging.info("[Main] Running: TRAIN → EVAL")
+
+        # override split for TRAIN
+        cfg_train = deepcopy(cfg)
+        cfg_train.datasets.split = "train"
+        run_train(cfg_train)
+
+        # override split for EVAL (full validation)
+        cfg_eval = deepcopy(cfg)
+        cfg_eval.datasets.split = "val"
+        run_eval(cfg_eval)
+
     else:
-        raise ValueError(f"Unknown stage: {stage}")
+        raise ValueError(
+            f"[Main] Unknown --stage '{stage}'. "
+            f"Valid options: train, eval, all."
+        )
+
+    logging.info("========== MAIN DONE ==========")
 
 
 if __name__ == "__main__":
