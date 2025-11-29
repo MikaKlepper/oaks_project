@@ -1,222 +1,136 @@
-# # pipeline/utils/config_loader.py
+# utils/config_loader.py
 
-# imports
 from pathlib import Path
 from omegaconf import OmegaConf
 from .dir_builder import build_feature_dirs
 
 
-
-# helper function for cli args
 def incorporate_cli_args(cfg, args):
     """
-    Incorpororporate CLI arguments into a config object.
-
-    Args:
-        cfg (OmegaConf): The config object to update.
-        args (argparse.Namespace): The CLI arguments to incorporate.
-
-    Returns:
-        cfg (OmegaConf): The updated config object.
-        cli_cfg_entries (list[str]): A list of strings representing the
-            updated config entries.
+    Merge CLI overrides INTO the base config.
+    When args is None (subprocess), skip all CLI merging.
     """
+    if args is None:
+        return cfg, []
 
-    cli_cfg = {}
-    cli_cfg_entries = []
+    cli = OmegaConf.create()
+    entries = []
 
-    if getattr(args, "model", None):
-        cli_cfg.setdefault("features", {})["encoder"] = args.model.upper()
-        cli_cfg_entries.append(f"features.encoder={args.model}")
+    # -----------------------------------------
+    # FEATURES
+    # -----------------------------------------
+    if args.model:
+        cli.features = OmegaConf.create()
+        cli.features.encoder = args.model.upper()
+        entries.append(f"features.encoder={args.model}")
 
-    if getattr(args, "probe", None):
-        cli_cfg.setdefault("probe", {})["type"] = args.probe
-        cli_cfg_entries.append(f"probe.type={args.probe}")
-    
-    if getattr(args, "hidden_dim", None) is not None:
-        cli_cfg.setdefault("probe", {})["hidden_dim"] = args.hidden_dim
-        cli_cfg_entries.append(f"probe.hidden_dim={args.hidden_dim}")
+    if args.ftype:
+        cli.setdefault("features", OmegaConf.create()).type = args.ftype
 
-    if getattr(args, "layers", None) is not None:
-        cli_cfg.setdefault("probe", {})["layers"] = args.layers
-        cli_cfg_entries.append(f"probe.layers={args.layers}")
+    # -----------------------------------------
+    # PROBE
+    # -----------------------------------------
+    if args.probe:
+        cli.probe = OmegaConf.create()
+        cli.probe.type = args.probe
+        entries.append(f"probe.type={args.probe}")
 
-    # store k but DO NOT assign default subset yet
-    k = getattr(args, "k", None)
-    if k is not None:
-        cli_cfg.setdefault("fewshot", {})["k"] = k
-        cli_cfg_entries.append(f"fewshot.k={k}")
+    if args.hidden_dim is not None:
+        cli.setdefault("probe", OmegaConf.create()).hidden_dim = args.hidden_dim
+    if args.layers is not None:
+        cli.setdefault("probe", OmegaConf.create()).num_layers = args.layers
 
-    if getattr(args, "agg", None) is not None:
-        cli_cfg.setdefault("aggregation", {})["type"] = args.agg
-        cli_cfg_entries.append(f"aggregation.type={args.agg}")
+    # -----------------------------------------
+    # FEW-SHOT
+    # -----------------------------------------
+    if args.k is not None:
+        cli.fewshot = OmegaConf.create()
+        cli.fewshot.k = args.k
 
-    if getattr(args, "ftype", None):
-        cli_cfg.setdefault("features", {})["type"] = args.ftype
-        cli_cfg_entries.append(f"features.type={args.ftype}")
+    # -----------------------------------------
+    # AGGREGATION
+    # -----------------------------------------
+    if args.agg:
+        cli.aggregation = OmegaConf.create()
+        cli.aggregation.type = args.agg
 
-    rt = cli_cfg.setdefault("runtime", {})
+    # -----------------------------------------
+    # RUNTIME OVERRIDES — ALWAYS MERGE
+    # -----------------------------------------
+    cli.setdefault("runtime", OmegaConf.create())
+    for name in ["optimizer", "loss", "device", "lr",
+                 "batch_size", "epochs", "momentum", "weight_decay",
+                 "num_workers"]:
+        v = getattr(args, name, None)
+        if v is not None:
+            cli.runtime[name] = v
 
-    for name in ["optimizer", "loss", "device", "lr", "batch_size", "epochs",
-                 "momentum", "weight_decay"]:
-        value = getattr(args, name, None)
-        if value is not None:
-            rt[name] = value
-            cli_cfg_entries.append(f"runtime.{name}={value}")
+    # -----------------------------------------
+    # DATASET STAGE
+    # -----------------------------------------
+    if args.stage == "train":
+        cli.datasets = OmegaConf.create()
+        cli.datasets.split = "train"
 
-    # handle dataset subset selection with the following
-    # priority:
-    #   1) subset_csv
-    #   2) subset_fraction
-    #   3) automatic k-default
-    #   4) nothing -> full dataset
+        if args.train_subset_csv:
+            cli.datasets.use_subset = True
+            cli.datasets.subset_csv = args.train_subset_csv
+        else:
+            cli.datasets.use_subset = False
 
-    ds = cli_cfg.setdefault("datasets", {})
+        if args.k is not None and not args.train_subset_csv:
+            cli.datasets.use_subset = True
+            cli.datasets.subset_csv = (
+                f"{cfg.data.data_root}/FewShotCompoundBalanced/train_fewshot_k{args.k}.csv"
+            )
 
-    # stage handling (unchanged)
-    if getattr(args, "stage", None):
-        stage = args.stage
-        
-        ds = cli_cfg.setdefault("datasets", {})
-        
-        if stage == "train":
-            ds["split"] = "train"
-            cli_cfg_entries.append("datasets.split=train")
+    elif args.stage == "eval":
+        cli.datasets = OmegaConf.create()
+        cli.datasets.split = "val"
+        cli.datasets.use_subset = True
+        cli.datasets.subset_csv = (
+            args.eval_subset_csv
+            or f"{cfg.data.data_root}/Subsets/val_balanced_subset.csv"
+        )
 
-        elif stage == "eval":
-            ds["split"] = "val"
-            ds["use_subset"] = True
-            ds["subset_csv"] = f"{cfg.data.data_root}/Subsets/val_balanced_subset.csv"
-            cli_cfg_entries.append("datasets.split=val")
-            cli_cfg_entries.append(f"datasets.subset_csv={ds['subset_csv']}")
-            cli_cfg_entries.append("datasets.use_subset=True")
+    elif args.stage == "test":
+        cli.datasets = OmegaConf.create()
+        cli.datasets.split = "test"
+        cli.datasets.use_subset = False
 
-        elif stage == "test":
-            ds["split"] = "test"
-            ds["use_subset"] = True
-            #ds["subset_csv"] = f"{cfg.data.data_root}/Subsets/test_balanced_subset.csv"
-            cli_cfg_entries.append("datasets.split=test")
-            #cli_cfg_entries.append(f"datasets.subset_csv={ds['subset_csv']}")
-            cli_cfg_entries.append("datasets.use_subset=True")
+    merged = OmegaConf.merge(cfg, cli)
+    return merged, entries
 
-        elif stage == "all":
-            ds["split"] = "all"
-            ds["use_subset"] = True
-            cli_cfg_entries.append("datasets.split=all")
-        
-    if k is not None:
-        stage_now = cli_cfg.get("datasets", {}).get("split", None)
-
-        if stage_now == "train":
-            ds = cli_cfg.setdefault("datasets", {})
-            fewshot_csv = f"{cfg.data.data_root}/FewShotCompoundBalanced/train_fewshot_k{k}.csv"
-            ds["use_subset"] = True
-            ds["subset_csv"] = fewshot_csv
-            cli_cfg_entries.append(f"datasets.subset_csv={fewshot_csv}")
-            cli_cfg_entries.append("datasets.use_subset=True")
-
-     # custom subset_csv -> ALWAYS wins
-    if getattr(args, "subset_csv", None):
-        ds["use_subset"] = True
-        ds["subset_csv"] = args.subset_csv
-        cli_cfg_entries.append(f"datasets.subset_csv={args.subset_csv}")
-        cli_cfg_entries.append("datasets.use_subset=True")
-
-    # 2) subset fraction overrides automatic k-default
-    elif getattr(args, "subset_fraction", None) is not None:
-        ds["use_subset"] = True
-        ds["subset_fraction"] = args.subset_fraction
-        cli_cfg_entries.append(f"datasets.subset_fraction={args.subset_fraction}")
-        cli_cfg_entries.append("datasets.use_subset=True")
-
-    # merge
-    if cli_cfg:
-        cfg = OmegaConf.merge(cfg, cli_cfg)
-
-    return cfg, cli_cfg_entries
 
 
 def load_merged_config(config_path, args=None):
-    """
-    Load a merged config object from a base yaml file and apply CLI arguments.
 
-    The function follows the following steps:
+    config_path = Path(config_path)
+    base_cfg = OmegaConf.load(config_path)
 
-    1. Load the base yaml file into an OmegaConf object.
-    2. Apply CLI arguments to the config object.
-    3. Determine override files based on the CLI arguments.
-    4. Load the override files into separate OmegaConf objects.
-    5. Merge the override objects into the base config object.
-    6. Save the final merged config object to a yaml file.
+    # 1) Apply CLI args only once (when main.py calls this)
+    cfg, _ = incorporate_cli_args(base_cfg, args)
 
-    Args:
-        config_path (Path): The base config path.
-        args (argparse.Namespace): The CLI arguments to apply.
+    # 2) Build dirs based on SPLIT + encoder
+    dirs = build_feature_dirs(
+        cfg.features.features_root,
+        cfg.features.encoder,
+        cfg.experiment_root,
+        cfg.datasets.split,
+    )
 
-    Returns:
-        cfg (OmegaConf): The final merged config object.
-    """
-    config_path = Path(config_path) # base config path
+    cfg.features.slide_dir = str(dirs["slide_dir"])
+    cfg.features.animal_dir = str(dirs["animal_dir"])
 
-    # step 1 : load base yaml file
-    base_config = OmegaConf.load(config_path)
+    # 3) Encoder dims
+    pipeline_root = Path(__file__).resolve().parents[1]
+    enc_file = pipeline_root / "configs" / "models" / "encoder_dims.yaml"
+    enc_cfg = OmegaConf.load(enc_file)
+    cfg.features.embed_dim = enc_cfg.encoder_dims[cfg.features.encoder]
 
-    # step 2 : apply cli args
-    cfg, cli_cfg_entries = incorporate_cli_args(base_config, args)
+    # 4) Probe override
+    probe_yaml = pipeline_root / "configs" / "probes" / f"{cfg.probe.type}.yaml"
+    if probe_yaml.exists():
+        cfg = OmegaConf.merge(cfg, OmegaConf.load(probe_yaml))
 
-    # build feature directories and update config
-    dirs = build_feature_dirs(cfg.features.features_root, cfg.features.encoder)
-
-    # Assign dynamic dirs back into config
-    for key, path in dirs.items():
-        cfg.features[key] = str(path)
-
-    # step 3: determine override files after cli
-    encoder = cfg["features"]["encoder"]
-    probe = cfg["probe"]["type"]
-    #k = cfg["fewshot"]["k"]
-
-    # step 4 : load encoder dims file (NO merge)
-    encoder_dims_path = config_path.parent / "models/encoder_dims.yaml"
-    encoder_dims_cfg = OmegaConf.load(encoder_dims_path)
-    cfg.features.embed_dim = encoder_dims_cfg.encoder_dims[encoder]
-
-    # 5) load probe 
-    probe_override_path = config_path.parent / f"probes/{probe}.yaml"
-
-    yaml_entries= []
-    if probe_override_path.exists():
-        probe_override = OmegaConf.load(probe_override_path)
-        cfg = OmegaConf.merge(cfg, probe_override)
-        yaml_entries.append(str(probe_override_path.relative_to(config_path.parent)))
-
-    cfg.user_input = [f"cli: {e}" for e in cli_cfg_entries] + yaml_entries
-
-    # model_override_path = config_path.parent / f"models/{encoder}.yaml"
-    # probe_override_path = config_path.parent / f"probes/{probe}.yaml"
-    # #fewshot_override_path = config_path.parent / f"fewshot/k{k}.yaml" if k is not None else None
-
-    # override_paths = [model_override_path, probe_override_path]
-
-    # # step 4: load overrides
-    # override_cfgs = [OmegaConf.load(p) for p in override_paths if p is not None and p.exists()]
-    # if override_cfgs:
-    #     cfg = OmegaConf.merge(cfg, *override_cfgs)
-
-    # yaml_entries= [str(p.relative_to(config_path.parent)) for p in override_paths if p is not None and p.exists()]
-    # cfg.user_input = [f"cli: {e}" for e in cli_cfg_entries] + yaml_entries
-
-    # step 5: apply placeholders and convert to python dict
-    cfg_resolved = OmegaConf.to_container(cfg, resolve=True)
-
-    # step 6: save final merged config
-    exp_root = Path(cfg_resolved["experiment_root"])
-    exp_root.mkdir(parents=True, exist_ok=True)
-    config_out = exp_root / "config.yaml"
-
-    final_cfg = OmegaConf.create(cfg_resolved)
-    OmegaConf.save(config=final_cfg, f=config_out)
-    print(f"[CONFIG] Saved final merged config -> {config_out}")
-
-    return final_cfg,cfg_resolved
-
+    return cfg

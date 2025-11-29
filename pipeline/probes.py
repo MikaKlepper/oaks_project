@@ -1,88 +1,70 @@
 # pipeline/probes.py
 import logging
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+import math
 from pathlib import Path
-from typing import Union
+from dataclasses import dataclass
 
 import numpy as np
 import joblib
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch import nn, optim
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from sklearn.linear_model import LogisticRegression as SkLogistic
+from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import LinearSVC, SVC
 
 
 
+class BaseProbe:
+    def fit(self, dataset):
+        raise NotImplementedError
 
-# asbtract class all probes should inherit from
-class BaseProbe(ABC):
-    @abstractmethod
-    def fit(self, X: Union[np.ndarray, torch.Tensor], y: Union[np.ndarray, torch.Tensor]):
-        pass
-    
-    @abstractmethod
-    def predict(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        pass
+    def predict(self, dataset):
+        raise NotImplementedError
 
-    @abstractmethod
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        raise NotImplementedError(f"{self.__class__.__name__} does not implement predict_proba method.")
+    def predict_proba(self, dataset):
+        raise NotImplementedError
 
-    @abstractmethod
-    def save(self, path: Union[str, Path]):
-        pass
+    def save(self, path):
+        raise NotImplementedError
 
-    @abstractmethod
-    def load(self, path: Union[str, Path]):
-        pass
+    def load(self, path):
+        raise NotImplementedError
 
 
-# torch heads : linear, mlp
 class LinearHead(nn.Module):
-    """A simple linear classification head."""
-    def __init__(self, input_dim: int, num_classes: int):
+    def __init__(self, input_dim, num_classes):
         super().__init__()
-        self.linear = nn.Linear(input_dim, num_classes)
+        self.fc = nn.Linear(input_dim, num_classes)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.linear(x)
+    def forward(self, x):
+        return self.fc(x)
+
 
 class MLPClassifier(nn.Module):
-    """
-    A simple MLP classifier with a tunable number of hidden layers.
-    """
-    def __init__(
-        self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int
-    ):
+    def __init__(self, input_dim, hidden_dim, num_classes, num_layers):
         super().__init__()
-        layers = []
-        layers.append(nn.Linear(input_dim, hidden_dim))
-        layers.append(nn.ReLU())
+        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
         for _ in range(num_layers - 2):
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_dim, output_dim))
-        self.mlp = nn.Sequential(*layers)
+            layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+        layers.append(nn.Linear(hidden_dim, num_classes))
+        self.net = nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.mlp(x)
- 
- 
- # torch probe wrapper
+    def forward(self, x):
+        return self.net(x)
+
+
+# ============================================================
+# Torch Probe Config
+# ============================================================
 @dataclass
 class TorchProbeConfig:
-     # Architecture
     probe_type: str
     hidden_dim: int
     num_layers: int
 
-    # Optimization
     epochs: int
     lr: float
     batch_size: int
@@ -92,211 +74,318 @@ class TorchProbeConfig:
     weight_decay: float
     momentum: float
     loss: str
+    num_workers: int = 4
 
     def make_loss(self):
-        name= self.loss.lower()
+        name = self.loss.lower()
         if name == "crossentropy":
             return nn.CrossEntropyLoss()
-        elif name == "mse":
-            return nn.MSELoss()
-        #elif name == "bce":
-            #return nn.BCELoss()
-        else:
-            raise ValueError(f"Unsupported loss function: {self.loss}")
+        raise ValueError(f"Unsupported loss: {self.loss}")
 
-    def make_optimizer(self, model_params):
+    def make_optimizer(self, params):
         name = self.optimizer.lower()
         if name == "adam":
-            return optim.Adam(model_params, lr=self.lr, weight_decay=self.weight_decay)
+            return optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
         if name == "adamw":
-            return optim.AdamW(model_params, lr=self.lr, weight_decay=self.weight_decay)
-        if name == "rmsprop":
-            return optim.RMSprop(model_params, lr=self.lr, weight_decay=self.weight_decay)
+            return optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if name == "sgd":
-            return optim.SGD(model_params, lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        else:
-            raise ValueError(f"Unsupported optimizer: {self.optimizer}")
-        
+            return optim.SGD(
+                params,
+                lr=self.lr,
+                momentum=self.momentum,
+                weight_decay=self.weight_decay,
+            )
+        raise ValueError(f"Unsupported optimizer: {self.optimizer}")
+
+
+# ============================================================
+# TorchProbe
+# ============================================================
+# ============================================================
+# TorchProbe (FAST VERSION)
+# ============================================================
 class TorchProbe(BaseProbe):
     def __init__(self, model: nn.Module, cfg: TorchProbeConfig):
         self.cfg = cfg
-        self.model = model.to(self.cfg.device)
-        self.criterion = self.cfg.make_loss()
-        self.optimizer = self.cfg.make_optimizer(self.model.parameters())
-    
-    def _to_tensor(self, x: Union[np.ndarray, torch.Tensor], dtype=torch.dtype) -> torch.Tensor:
-        if isinstance(x, torch.Tensor):
-            return x.to(dtype=dtype, device=self.cfg.device)
-        return torch.tensor(x, dtype=dtype, device=self.cfg.device)
-        
-    def fit(self, X: Union[np.ndarray, torch.Tensor], y: Union[np.ndarray, torch.Tensor]):
-        device = self.cfg.device
-        X_t = self._to_tensor(X, dtype=torch.float32)
-        y_t = self._to_tensor(y, dtype=torch.long)
-        dataset = TensorDataset(X_t, y_t)
-        dataloader = DataLoader(dataset, batch_size=self.cfg.batch_size, shuffle=True)
+        self.model = model.to(cfg.device)
+        self.criterion = cfg.make_loss()
+        self.optimizer = cfg.make_optimizer(self.model.parameters())
 
-        
-        n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        logging.info(
-            f"[TorchProbe] Training on {device} "
-            f"({n_params:,} trainable parameters)"
+    def _build_scheduler(self, steps_per_epoch: int):
+        """Warmup + Cosine LR schedule (per batch)."""
+        total_steps = self.cfg.epochs * steps_per_epoch
+        warmup_steps = int(0.1 * total_steps)
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                return step / max(1, warmup_steps)     # linear warmup
+            progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+            return 0.5 * (1.0 + math.cos(math.pi * progress))  # cosine decay
+
+        return optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
+
+    def fit(self, dataset):
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=True,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            persistent_workers=True,
         )
+
+        steps_per_epoch = len(loader)
+        scheduler = self._build_scheduler(steps_per_epoch)
+
+        logging.info(f"[TorchProbe] Training on device: {self.cfg.device}")
         logging.info(str(self.model))
 
         best_loss = float("inf")
         best_state = None
-        best_epoch = 0
+        global_step = 0
 
-        for epoch in tqdm(range(self.cfg.epochs), desc="Training TorchProbe", unit="epoch", leave=True):
+        for epoch in range(self.cfg.epochs):
             self.model.train()
             running_loss = 0.0
 
-            for xb, yb in dataloader:
+            pbar = tqdm(
+                loader,
+                desc=f"Epoch {epoch+1}/{self.cfg.epochs}",
+                ncols=120,
+                leave=True,
+            )
+
+            for feats, labels in pbar:
+                feats = feats.to(self.cfg.device, non_blocking=True)
+                labels = labels.to(self.cfg.device, non_blocking=True)
+
                 self.optimizer.zero_grad()
-                logits = self.model(xb)
-                loss = self.criterion(logits, yb)
+                logits = self.model(feats)
+                loss = self.criterion(logits, labels)
                 loss.backward()
                 self.optimizer.step()
-                running_loss += loss.item() * xb.size(0) # because loss is averaged over batch
+                scheduler.step()
 
-            epoch_loss = running_loss / len(dataloader.dataset)
-            logging.info(f"Epoch {epoch+1}/{self.cfg.epochs} - Loss: {epoch_loss:.4f}")
+                global_step += 1
+                running_loss += loss.item() * feats.size(0)
+
+            # compute epoch avg
+            epoch_loss = running_loss / len(dataset)
+            lr = scheduler.get_last_lr()[0]
+
+            tqdm.write(
+                f"[TorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
+                f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
+            )
 
             if epoch_loss < best_loss:
                 best_loss = epoch_loss
-                best_epoch = epoch
-                best_state = {k:v.detach().cpu().clone() for k,v in self.model.state_dict().items()}
+                best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
 
-        if best_state is not None:
+        if best_state:
             self.model.load_state_dict(best_state)
-            logging.info(
-                f"Restored best model from epoch {best_epoch+1} with loss {best_loss:.4f}"
+            logging.info(f"[TorchProbe] Restored best model (loss={best_loss:.4f})")
+
+    def predict(self, dataset):
+        loader = DataLoader(dataset, batch_size=len(dataset), num_workers=4)
+        preds = []
+
+        self.model.eval()
+        with torch.no_grad():
+            pbar = tqdm(
+                loader,
+                desc="Predict",
+                ncols=120,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                           "[{elapsed}<{remaining}, {rate_fmt}]",
             )
-        
-    def predict(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        device = self.cfg.device
-        X_t = self._to_tensor(X, dtype=torch.float32)
+            for feats, _ in pbar:
+                feats = feats.to(self.cfg.device)
+                logits = self.model(feats)
+                preds.append(torch.argmax(logits, dim=1).cpu())
+
+        return torch.cat(preds).numpy()
+
+    def predict_proba(self, dataset):
+        loader = DataLoader(dataset, batch_size=len(dataset), num_workers=4)
+        probs = []
 
         self.model.eval()
         with torch.no_grad():
-            logits = self.model(X_t)
-            preds = torch.argmax(logits, dim=1)
+            pbar = tqdm(
+                loader,
+                desc="Predict Proba",
+                ncols=120,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                           "[{elapsed}<{remaining}, {rate_fmt}]",
+            )
+            for feats, _ in pbar:
+                feats = feats.to(self.cfg.device)
+                logits = self.model(feats)
+                probs.append(torch.softmax(logits, dim=1).cpu())
 
-        return preds.cpu().numpy()
+        return torch.cat(probs).numpy()
 
-    def predict_proba(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        device = self.cfg.device
-        X_t = self._to_tensor(X, dtype=torch.float32)
-
-        self.model.eval()
-        with torch.no_grad():
-            logits = self.model(X_t)
-            probs = torch.softmax(logits, dim=1)
-        return probs.cpu().numpy()
-
-    def save(self, path: Union[str, Path]):
+    def save(self, path):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.model.state_dict(), path)
         logging.info(f"[TorchProbe] Saved checkpoint to {path}")
 
-    def load(self, path: Union[str, Path]):
+    def load(self, path):
         path = Path(path)
         state = torch.load(path, map_location=self.cfg.device)
         self.model.load_state_dict(state)
         logging.info(f"[TorchProbe] Loaded checkpoint from {path}")
 
-# sklearn probe wrapper
 
+# ============================================================
+# Sklearn Probe
+# ============================================================
 class SklearnProbe(BaseProbe):
     def __init__(self, model):
         self.model = model
 
-    def _ensure_numpy(self, x: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        if isinstance(x, torch.Tensor):
-            return x.cpu().numpy()
-        return x
-    
-    def fit(self, X: Union[np.ndarray, torch.Tensor], y: Union[np.ndarray, torch.Tensor]):
+    def fit(self, dataset):
+        loader = DataLoader(dataset, batch_size=1024, num_workers=4)
+        X_list, y_list = [], []
+
+        pbar = tqdm(
+            loader,
+            desc="Sklearn: load data",
+            ncols=120,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                       "[{elapsed}<{remaining}, {rate_fmt}]",
+        )
+        for feats, labels in pbar:
+            X_list.append(feats.numpy())
+            y_list.append(labels.numpy())
+
+        X = np.concatenate(X_list, axis=0)
+        y = np.concatenate(y_list, axis=0)
+
         logging.info(f"[SklearnProbe] Fitting {self.model.__class__.__name__}")
-        self.model.fit(self._ensure_numpy(X), self._ensure_numpy(y))
+        self.model.fit(X, y)
 
-    def predict(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        return self.model.predict(self._ensure_numpy(X))
+    def predict(self, dataset):
+        loader = DataLoader(dataset, batch_size=1024, num_workers=2)
+        preds = []
 
-    def predict_proba(self, X: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
-        if hasattr(self.model, "predict_proba"):
-            return self.model.predict_proba(self._ensure_numpy(X))
-        else:
-            raise NotImplementedError(f"{self.model.__class__.__name__} does not implement predict_proba method.")
+        pbar = tqdm(
+            loader,
+            desc="Sklearn Predict",
+            ncols=120,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                       "[{elapsed}<{remaining}, {rate_fmt}]",
+        )
+        for feats, _ in pbar:
+            preds.append(self.model.predict(feats.numpy()))
 
-    def save(self, path: Union[str, Path]):
+        return np.concatenate(preds)
+
+    def predict_proba(self, dataset):
+        if not hasattr(self.model, "predict_proba"):
+            raise NotImplementedError("This sklearn model has no predict_proba()")
+
+        loader = DataLoader(dataset, batch_size=1024, num_workers=2)
+        probs = []
+
+        pbar = tqdm(
+            loader,
+            desc="Sklearn Predict Proba",
+            ncols=120,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                       "[{elapsed}<{remaining}, {rate_fmt}]",
+        )
+        for feats, _ in pbar:
+            probs.append(self.model.predict_proba(feats.numpy()))
+
+        return np.concatenate(probs, axis=0)
+
+    def save(self, path):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, path)
-        logging.info(f"[SklearnProbe] Saved checkpoint to {path}")
+        logging.info(f"[SklearnProbe] Saved sklearn model to {path}")
 
-    def load(self, path: Union[str, Path]):
+    def load(self, path):
         path = Path(path)
         self.model = joblib.load(path)
-        logging.info(f"[SklearnProbe] Loaded checkpoint from {path}")
+        logging.info(f"[SklearnProbe] Loaded sklearn model from {path}")
 
-# helper to get default probe path
-def default_probe_path(prepared, exp_root: Union[str, Path], is_torch: bool) -> Path:
-    exp_root = Path(exp_root)
-    probe_name = str(prepared["probe"]["type"]).lower()
-    ext = "pt" if is_torch else "joblib"
-    return exp_root / f"probe_{probe_name}.{ext}"
-    
+
+# ============================================================
+# # Helper: default checkpoint path
+# # ============================================================
+# def default_probe_path(prepared, exp_root: Path, is_torch: bool) -> Path:
+#     """
+#     Returns a default path like:
+#         exp_root / "probe_linear.pt"  (torch)
+#         exp_root / "probe_logreg.joblib" (sklearn)
+#     """
+#     probe_name = str(prepared["probe"]["type"]).lower()
+#     ext = "pt" if is_torch else "joblib"
+#     return Path(exp_root) / f"probe_{probe_name}.{ext}"
+
+
+
+def default_probe_path(prepared, exp_root, is_torch=True):
+    """
+    Always save/load the probe checkpoint inside the TRAIN folder of the experiment:
+        <experiment_root>/train/probe_<type>.pt or .joblib
+    """
+
+    suffix = ".pt" if is_torch else ".joblib"
+    probe_type = prepared["probe"]["type"]
+
+    ckpt_dir = Path(exp_root) / "train"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"probe_{probe_type}{suffix}"
+    return ckpt_dir / filename
+
+# ============================================================
+# Probe Factory
+# ============================================================
 def build_probe(prepared, input_dim: int, num_classes: int) -> BaseProbe:
-    probe_type = str(prepared["probe"]["type"]).lower()
+    p = prepared["probe"]
+    r = prepared["runtime"]
 
-    # device
-    device = prepared["runtime"]["device"]
+    device = r.get("device", None)
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Torch config
-    torch_cfg = TorchProbeConfig(
-        probe_type=probe_type,
-        hidden_dim=prepared["probe"]["hidden_dim"],
-        num_layers=prepared["probe"]["num_layers"],
-        epochs=prepared["runtime"]["epochs"],
-        lr=prepared["runtime"]["lr"],
-        batch_size=prepared["runtime"]["batch_size"],
+    cfg = TorchProbeConfig(
+        probe_type=p["type"],
+        hidden_dim=p["hidden_dim"],
+        num_layers=p["num_layers"],
+        epochs=r["epochs"],
+        lr=r["lr"],
+        batch_size=r["batch_size"],
         device=device,
-        optimizer=prepared["runtime"]["optimizer"],
-        weight_decay=prepared["runtime"]["weight_decay"],
-        momentum=prepared["runtime"]["momentum"],
-        loss=prepared["runtime"]["loss"],
+        optimizer=r["optimizer"],
+        weight_decay=r["weight_decay"],
+        momentum=r["momentum"],
+        loss=r["loss"],
+        num_workers=r.get("num_workers", 4),
     )
 
-    # Torch probes
-    if probe_type == "linear":
-        model = LinearHead(input_dim, num_classes)
-        return TorchProbe(model, torch_cfg)
+    t = p["type"].lower()
 
-    if probe_type == "mlp":
-        model = MLPClassifier(input_dim, torch_cfg.hidden_dim, num_classes, torch_cfg.num_layers)
-        return TorchProbe(model, torch_cfg)
+    # Torch probes
+    if t == "linear":
+        return TorchProbe(LinearHead(input_dim, num_classes), cfg)
+    if t == "mlp":
+        return TorchProbe(MLPClassifier(input_dim, cfg.hidden_dim, num_classes, cfg.num_layers), cfg)
 
     # Sklearn probes
-    if probe_type == "logreg":
-        model = SkLogistic(max_iter=1000, n_jobs=-1)
-        return SklearnProbe(model)
+    if t == "logreg":
+        return SklearnProbe(LogisticRegression(max_iter=1000, n_jobs=-1))
+    if t == "knn":
+        return SklearnProbe(KNeighborsClassifier(n_neighbors=p["knn_neighbors"], n_jobs=-1))
+    if t == "svm_linear":
+        return SklearnProbe(LinearSVC())
+    if t == "svm_rbf":
+        return SklearnProbe(SVC(kernel="rbf", probability=True))
 
-    if probe_type == "svm_linear":
-        model = LinearSVC()
-        return SklearnProbe(model)
-
-    if probe_type == "svm_rbf":
-        model = SVC(kernel="rbf", probability=True)
-        return SklearnProbe(model)
-
-    if probe_type == "knn":
-        k = prepared["probe"]["knn_neighbors"]
-        model = KNeighborsClassifier(n_neighbors=k, n_jobs=-1)
-        return SklearnProbe(model)
-
-    raise ValueError(f"Unknown probe type: {prepared.probe.type}")
+    raise ValueError(f"Unknown probe type: {p['type']}")

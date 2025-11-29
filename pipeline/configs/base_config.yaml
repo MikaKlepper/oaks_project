@@ -39,6 +39,7 @@ features:
   # test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
   # test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/features"
   use_cache: true
+  d_type: "float32"  # choices ["float32", "float16", "bfloat16"]
   embed_dim: null
 
 aggregation:

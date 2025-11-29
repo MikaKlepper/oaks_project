@@ -1,4 +1,4 @@
-# pipeline/argparser.pyc
+# pipeline/argparser.py
 import argparse
 
 def get_args():
@@ -9,78 +9,57 @@ def get_args():
                         default="configs/base_config.yaml",
                         help="Path to base YAML config file")
 
-    # Stage to run
+    # Stage controller
     parser.add_argument("--stage", type=str, required=False,
-        choices=[
-            "split", "check", "aggregate",
-            "train", "eval", "test", "all"
-        ],
+        choices=["train", "eval", "test", "all"],
         help="Pipeline stage to execute"
     )
+
     # Model override
-    parser.add_argument("--model", type=str, default=None,
-        help="Encoder name (e.g. UNI, UNI2, VIRCHOW, etc.)")
+    parser.add_argument("--model", type=str, default=None)
 
     # Probe override
     parser.add_argument("--probe", type=str, default=None,
-        choices=["linear", "mlp", "knn", "logreg", "svm_linear", "svm_rbf"],
-        help="Probe type override"
-    )
-       # Architecture hyperparameters
-    parser.add_argument("--hidden_dim", type=int, default=None,
-        help="Hidden dimension for MLP probe")
+        choices=["linear", "mlp", "knn", "logreg", "svm_linear", "svm_rbf"])
+    parser.add_argument("--hidden_dim", type=int, default=None)
+    parser.add_argument("--layers", type=int, default=None)
 
-    parser.add_argument("--layers", type=int, default=None,
-        help="Number of MLP layers")
-
-    # feature type, animal or slide
+    # Feature type
     parser.add_argument("--ftype", type=str, default=None,
-        choices=["animal", "slide"],
-        help="Type of features to use"
-    )
+        choices=["animal", "slide"])
 
     # Few-shot K
-    parser.add_argument("--k", type=int, default=None,
-        help="Few-shot subset size (k)")
-    
-    # Aggegation type
+    parser.add_argument("--k", type=int, default=None)
+
+    # Aggregation type
     parser.add_argument("--agg", type=str, default=None,
-        choices=["mean", "max", "min", "sum"],
-        help="Aggregation type")
+        choices=["mean", "max", "min", "sum"])
 
-    # Optional custom subset CSV
-    parser.add_argument( "--subset_csv", type=str, default=None,
-                         help="Optional custom subset CSV to use instead of train/val/test"
-    )
-    
+    # -------------------------------
+    # Minimal subset flags (final design)
+    # -------------------------------
+    parser.add_argument("--train_subset_csv", type=str, default=None,
+        help="Subset CSV to use only during training")
+
+    parser.add_argument("--eval_subset_csv", type=str, default=None,
+        help="Subset CSV to use only during evaluation")
+
+
     # Training hyperparameters
-    parser.add_argument("--optimizer", type=str, help="Override optimizer type: adam, adamw, sgd, rmsprop")
-    parser.add_argument("--loss", type=str, help="Loss function: crossentropy, mse, bce")
-    parser.add_argument("--weight_decay", type=float, help="Weight decay for optimizer")
-    parser.add_argument("--momentum", type=float, help="Momentum for SGD/RMSProp")
-    parser.add_argument("--lr", type=float,help="Learning rate override")
-    parser.add_argument("--batch_size", type=int, help="Batch size override")
-    parser.add_argument("--epochs", type=int,help="Epoch override")
-    parser.add_argument("--device", type=str, help="Training device: cpu, cuda, mps")
-    
+    parser.add_argument("--optimizer", type=str)
+    parser.add_argument("--loss", type=str)
+    parser.add_argument("--weight_decay", type=float)
+    parser.add_argument("--momentum", type=float)
+    parser.add_argument("--lr", type=float)
+    parser.add_argument("--batch_size", type=int)
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--device", type=str)
 
-        # Optional fractional subset
-    parser.add_argument(
-        "--subset_fraction",
-        type=float,
-        default=None,
-        help="Optional fraction of the split to use (e.g., 0.1 for 10%)"
-    )
-
-    # Eval checkpoint
-    parser.add_argument("--model_path", type=str, default=None,
-        help="Path to trained probe checkpoint")
+    # Checkpoint for eval
+    parser.add_argument("--model_path", type=str, default=None)
 
     # Behavior flags
-    parser.add_argument("--dry_run", action="store_true",
-        help="Simulate pipeline without running heavy computations")
-
-    parser.add_argument("--overwrite", action="store_true",
-        help="Allow overwriting experiment folders")
+    parser.add_argument("--dry_run", action="store_true")
+    parser.add_argument("--overwrite", action="store_true")
 
     return parser.parse_args()

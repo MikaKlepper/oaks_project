@@ -1,98 +1,98 @@
-import pandas as pd
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 import torch
+from tqdm import tqdm
+import os
 
-def group_features_by_animal(prepared):
-    """
-    Aggregate slide-level features into animal-level features.
 
-    Parameters
-    ----------
-    prepared : dict
-        A dictionary containing the following keys:
-            - "df": A pandas DataFrame containing the slide metadata.
-            - "animal_dir": A Path object pointing to the directory where the animal-level features will be saved.
-            - "slide_dir": A Path object pointing to the directory where the slide-level features are stored.
-            - "split": A string indicating the split (e.g. "train", "val", "test").
+def load_pt(path):
+    return torch.load(path, map_location="cpu")
 
-    Returns
-    -------
-    dict
-        A dictionary containing summary statistics about the aggregation process.
-    """
 
-    data = prepared["data"]   
+def group_features_by_animal(
+    prepared,
+    max_processes=min(os.cpu_count(), 32),
+    min_completion_ratio=0.9,
+):
+    data = prepared["data"]
     df = data["df"]
-    animal_dir = data["features_dir"]
-    slide_dir = data["slide_dir"]
-    split = data["split"]
+    slide_dir = Path(data["slide_dir"])
+    out_dir = Path(data["features_dir"])
+    embed_dim = data["embed_dim"]
+    aggregate = data.get("aggregate", "mean")
 
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[INFO] Creating animal features for split: {split}")
-    print(f"[INFO] Slide feature directory:  {slide_dir}")
-    print(f"[INFO] Animal feature directory: {animal_dir}")
-    print(f"[INFO] Total number of rows in DF: {len(df)}")
+    groups = df.groupby("subject_organ_UID")["slide_id"].apply(list)
+    animals = list(groups.index)
 
-    # create output directory if not exists
-    animal_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[FAST] Processes used: {max_processes}")
 
-    # column check
-  
-    required_cols = {"slide_id", "subject_organ_UID"}
+    # -------------------------------
+    # Create pool OUTSIDE try/finally
+    # -------------------------------
+    pool = ProcessPoolExecutor(max_workers=max_processes)
 
-    if not required_cols.issubset(df.columns):
-        raise ValueError(f"CSV must contain columns: {required_cols}")
+    try:
+        for animal in tqdm(animals, ncols=120):
+            outpath = out_dir / f"{animal}.pt"
+            if outpath.exists():
+                continue
 
-    # group slide IDs by animal
-    grouped = df.groupby("subject_organ_UID")["slide_id"].apply(list)
+            slide_ids = groups[animal]
+            slide_paths = [slide_dir / f"{sid}.pt" for sid in slide_ids]
 
+            futures = {pool.submit(load_pt, p): p for p in slide_paths}
 
-    summary = {
-        "split": split,
-        "num_animals": len(grouped),
-        "animals": []
-    }
+            feats = []
+            failed = []
 
-    print(f"[INFO] Aggregating features for {len(grouped)} animals...")
+            for fut in as_completed(futures):
+                p = futures[fut]
+                try:
+                    feats.append(fut.result())
+                except Exception:
+                    failed.append(p)
 
-    missing_files = []
+            total_exp = len(slide_paths)
+            total_got = len(feats)
+            ratio = total_got / total_exp
 
-    for subject_id, slide_ids in grouped.items():
-        out_file = animal_dir / f"{subject_id}.pt"
+            # ----------------------------------------------
+            # Require minimum completeness (90% default)
+            # ----------------------------------------------
+            if ratio < min_completion_ratio:
+                print(
+                    f"[SKIP] Animal '{animal}': {total_got}/{total_exp} "
+                    f"({ratio:.1%}) < required {min_completion_ratio:.0%}. Skipping."
+                )
+                continue
 
-        summary["animals"].append(
-            {"subject": subject_id, "num_slides": len(slide_ids)}
-        )
+            big = torch.cat(feats, dim=0)
 
-        # skip if it is already there
-        if out_file.exists():
-            continue
-
-        tensors = []
-        for slide_id in slide_ids:
-            feat_path = slide_dir / f"{slide_id}.pt"
-
-            if feat_path.exists():
-                tensors.append(torch.load(feat_path, map_location="cpu"))
+            if aggregate == "mean":
+                reduced = big.mean(0)
+            elif aggregate == "max":
+                reduced = big.max(0)[0]
+            elif aggregate == "min":
+                reduced = big.min(0)[0]
             else:
-                missing_files.append(feat_path)
+                raise ValueError(f"Unknown aggregation '{aggregate}'")
 
-        # Save combined tensor or warn
-        if tensors:
-            combined = torch.cat(tensors, dim=0)
-            torch.save(combined, out_file)
-        else:
-            print(f"[WARN] No valid slide features for animal {subject_id}")
+            if reduced.numel() != embed_dim:
+                print(
+                    f"[SKIP] Dim mismatch for animal '{animal}' "
+                    f"(expected {embed_dim}, got {reduced.numel()})."
+                )
+                continue
 
-    print("\n[INFO] Finished producing animal-level features.")
+            torch.save(reduced, outpath)
 
-    if missing_files:
-        print(f"[WARNING] Missing features for {len(missing_files)} slides.")
-        for m in missing_files[:10]:
-            print(" -", m)
-        if len(missing_files) > 10:
-            print(" ...")
-    else:
-        print("[INFO] No missing feature files detected.")
+    finally:
+        # ----------------------------------------------
+        # CRITICAL: Shut down process pools
+        # ----------------------------------------------
+        print("[CLEANUP] Shutting down process pool...")
+        pool.shutdown(wait=True, cancel_futures=True)
 
-    return summary
+    print("[FAST] Animal-level feature creation complete.")

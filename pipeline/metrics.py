@@ -7,15 +7,34 @@ from typing import Optional, Dict
 import numpy as np
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score,confusion_matrix, roc_auc_score, roc_curve,classification_report, ConfusionMatrixDisplay
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    roc_auc_score,
+    roc_curve,
+    classification_report,
+    ConfusionMatrixDisplay
+)
 
-# helper function to ensure directory exists
+
+# ---------------------------------------------------------
+# Helper: ensure directory exists
+# ---------------------------------------------------------
 def _ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-# create and save confusion matrix plot
-def plot_confusion_matrix(y_true, y_pred, out_path, class_names=None):
+
+# ---------------------------------------------------------
+# Confusion Matrix (matplotlib only)
+# ---------------------------------------------------------
+def plot_confusion_matrix(y_true, y_pred, out_path: Path, class_names=None):
+    """
+    Saves a confusion matrix using sklearn's ConfusionMatrixDisplay.
+    """
     disp = ConfusionMatrixDisplay.from_predictions(
         y_true,
         y_pred,
@@ -23,7 +42,6 @@ def plot_confusion_matrix(y_true, y_pred, out_path, class_names=None):
         cmap="Blues",
         colorbar=True
     )
-
     plt.title("Confusion Matrix")
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
@@ -31,73 +49,98 @@ def plot_confusion_matrix(y_true, y_pred, out_path, class_names=None):
 
     logging.info(f"[Metrics] Saved confusion matrix → {out_path}")
 
-# roc curve for binary classification
-def plot_roc_binary(y_true, y_score, out_path):
+
+# ---------------------------------------------------------
+# ROC Curve (binary only)
+# ---------------------------------------------------------
+def plot_roc_binary(y_true, y_score, out_path: Path):
+    """
+    Saves a binary ROC curve using pure matplotlib.
+    """
     fpr, tpr, _ = roc_curve(y_true, y_score)
     auc = roc_auc_score(y_true, y_score)
 
-    fig, ax = plt.subplots(figsize=(4, 4))
-    ax.plot(fpr, tpr, label=f"AUC = {auc:.3f}")
-    ax.plot([0, 1], [0, 1], linestyle="--", color="gray")
+    plt.figure(figsize=(4, 4))
+    plt.plot(fpr, tpr, label=f"AUC = {auc:.3f}", linewidth=2)
+    plt.plot([0, 1], [0, 1], linestyle="--", color="gray")
 
-    ax.set(
-        xlabel = "False Positive Rate",
-        ylabel = "True Positive Rate",
-        title = "ROC Curve"
-    )
-    ax.legend()
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150)
+    plt.close()
 
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
-    plt.close(fig)
     logging.info(f"[Metrics] Saved ROC curve → {out_path}")
 
 
-# maini function to compute and log metrics
+# ---------------------------------------------------------
+# Main metric computation
+# ---------------------------------------------------------
 def compute_and_log_metrics(
-        y_true:np.ndarray,
-        y_pred:np.ndarray,
-        y_proba:Optional[np.ndarray],
-        exp_root:Path,
-        class_names:Optional[list]=None,
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+        y_proba: Optional[np.ndarray],
+        exp_root: Path,
+        class_names: Optional[list] = None,
     ) -> Dict[str, float]:
-    
+    """
+    Computes all classification metrics and saves:
+    - confusion_matrix.png
+    - roc_curve.png (binary only)
+    - classification_report.txt
+    - metrics.json
+    """
+
     metrics_dir = _ensure_dir(Path(exp_root) / "metrics")
-    #Compute basic metrics
+
+    # --------------------------------------------
+    # Basic metrics
+    # --------------------------------------------
     acc = accuracy_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred, average="binary")
     prec = precision_score(y_true, y_pred, zero_division=0)
     rec = recall_score(y_true, y_pred, zero_division=0)
+    f1 = f1_score(y_true, y_pred, zero_division=0)
 
     logging.info(f"[Metrics] Accuracy:  {acc:.4f}")
     logging.info(f"[Metrics] Precision: {prec:.4f}")
     logging.info(f"[Metrics] Recall:    {rec:.4f}")
     logging.info(f"[Metrics] F1-score:  {f1:.4f}")
 
-    #Confusion Matrix
+    
     cm_path = metrics_dir / "confusion_matrix.png"
     plot_confusion_matrix(y_true, y_pred, cm_path, class_names)
 
-    # roc auc
+    # --------------------------------------------
+    # ROC AUC (binary only)
+    # --------------------------------------------
     roc_auc = None
     if y_proba is not None and len(np.unique(y_true)) == 2:
-        # if y_proba is shape (N,2), take positive class column
+
+        # If shape (N,2), select prob of positive class
         if y_proba.ndim == 2 and y_proba.shape[1] == 2:
             y_score = y_proba[:, 1]
         else:
-            y_score = y_proba  # assume already (N,)
+            y_score = y_proba  # already (N,)
 
         roc_auc = roc_auc_score(y_true, y_score)
-        plot_roc_binary(y_true, y_score, metrics_dir / "roc_curve.png")
+        roc_path = metrics_dir / "roc_curve.png"
+        plot_roc_binary(y_true, y_score, roc_path)
+
         logging.info(f"[Metrics] ROC AUC: {roc_auc:.4f}")
 
-    #Classification Report
-    report = classification_report(y_true, y_pred, digits=4)
+    # --------------------------------------------
+    # Classification report
+    # --------------------------------------------
+    report_text = classification_report(y_true, y_pred, digits=4)
     with open(metrics_dir / "classification_report.txt", "w") as f:
-        f.write(report)
-    logging.info(f"[Metrics] Saved classification report")
+        f.write(report_text)
+    logging.info(f"[Metrics] Saved classification_report.txt")
 
-    #Store numeric metrics
+    # --------------------------------------------
+    # Store all numeric metrics
+    # --------------------------------------------
     metrics = {
         "accuracy": float(acc),
         "precision": float(prec),
@@ -105,7 +148,10 @@ def compute_and_log_metrics(
         "f1": float(f1),
         "roc_auc": float(roc_auc) if roc_auc is not None else None,
     }
+
     with open(metrics_dir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
+
     logging.info(f"[Metrics] Saved metrics.json")
+
     return metrics

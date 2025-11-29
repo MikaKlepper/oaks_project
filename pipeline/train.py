@@ -1,75 +1,72 @@
 # pipeline/train.py
+
 import logging
 from pathlib import Path
-
-import numpy as np
-import torch
-from torch.utils.data import DataLoader
 
 from argparser import get_args
 from utils.config_loader import load_merged_config
 from data.prepare_dataset import prepare_dataset_inputs
+from data.create_datasets import ToxicologyDataset
 from data.features_per_animal import group_features_by_animal
 from data.dataset_check import check_subset_consistency
-from data.create_datasets import ToxicologyDataset
+
 from probes import build_probe, TorchProbe, default_probe_path
 from logger import setup_logger
-
-
-def _load_full_dataset_as_tensors(dataset):
-    """
-    Load the entire ToxicologyDataset into two tensors (X, y)
-    in ONE batch. No NumPy conversion — probes handle both.
-    """
-    loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-    for feats, labels in loader:
-        return feats, labels
-
-    raise RuntimeError("Dataset loader returned no batches.")
 
 
 def run_train(cfg):
     exp_root = Path(cfg.experiment_root)
     setup_logger(exp_root)
-    logging.info("========== TRAIN STAGE ==========")
 
-    # 1) Prepare dataset
+    logging.info("========== TRAIN ==========")
+
+    # ---------------- LOAD + PREPARE DATA ----------------
     prepared = prepare_dataset_inputs(cfg)
 
-    # 2) Build animal-level features if needed
+    # Build animal-level features if required
     if prepared["data"]["features_type"] == "animal":
-        logging.info("[Train] Building animal-level features...")
+        logging.info("[Train] Aggregating slide → animal features…")
         group_features_by_animal(prepared)
 
-    # 3) Validate split consistency
+    # Run pre-checks
     check_subset_consistency(prepared)
 
-    # 4) Dataset object
-    ds = ToxicologyDataset(prepared)
-    logging.info(f"[Train] Dataset size: {len(ds)}")
-
-    # 5) Load full dataset (tensor X, tensor y)
-    X, y = _load_full_dataset_as_tensors(ds)
+    # Create dataset object
+    dataset = ToxicologyDataset(prepared)
 
     input_dim = prepared["data"]["embed_dim"]
-    num_classes = int(prepared["data"]["num_classes"])
+    num_classes = prepared["data"]["num_classes"]
 
-    logging.info(f"[Train] Input dim: {input_dim}, Num classes: {num_classes}")
-
-    # 6) Build & train probe
     probe = build_probe(prepared, input_dim, num_classes)
-    probe.fit(X, y)
+    ckpt_path = default_probe_path(prepared, exp_root, isinstance(probe, TorchProbe))
 
-    # 7) Save checkpoint
-    is_torch = isinstance(probe, TorchProbe)
-    ckpt_path = default_probe_path(prepared, exp_root, is_torch=is_torch)
+    if ckpt_path.exists():
+        logging.warning(
+            f"[Train] Found existing checkpoint: {ckpt_path}\n"
+            f"[Train] Skipping training (nothing to do)."
+        )
+        return
+
+    logging.info("[Train] Starting training…")
+    probe.fit(dataset)
     probe.save(ckpt_path)
 
-    logging.info("========== TRAIN STAGE DONE ==========")
-    return probe, ckpt_path
+
+    logging.info(f"[Train] Saved checkpoint → {ckpt_path}")
+    logging.info("========== TRAIN DONE ==========")
 
 
 if __name__ == "__main__":
     args = get_args()
-    cfg, _ = load_merged_config(args.config, args)
+
+    # The config passed to train.py is already final & merged.
+    cfg = load_merged_config(args.config, args=None)
+
     run_train(cfg)
+
+    # HARD GPU RESET
+    import torch, gc
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    raise SystemExit(0)
