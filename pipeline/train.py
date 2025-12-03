@@ -6,8 +6,12 @@ from pathlib import Path
 from argparser import get_args
 from utils.config_loader import load_merged_config
 from data.prepare_dataset import prepare_dataset_inputs
-from data.create_datasets import ToxicologyDataset
+
+# NEW order: slides first, animals after
+from data.process_slide_features import process_slide_features
 from data.features_per_animal import group_features_by_animal
+
+from data.create_datasets import ToxicologyDataset
 from data.dataset_check import check_subset_consistency
 
 from probes import build_probe, TorchProbe, default_probe_path
@@ -23,15 +27,27 @@ def run_train(cfg):
     # ---------------- LOAD + PREPARE DATA ----------------
     prepared = prepare_dataset_inputs(cfg)
 
-    # Build animal-level features if required
+    # ---------------------------------------------------------
+    # ALWAYS PROCESS SLIDE FEATURES FIRST (produces final (D,) slide vectors)
+    # ---------------------------------------------------------
+    logging.info("[Train] Processing slide → final (D,) slide features…")
+    process_slide_features(prepared)
+
+    # ---------------------------------------------------------
+    # IF ANIMAL MODE → THEN aggregate slides → animal (D,) embeddings
+    # ---------------------------------------------------------
     if prepared["data"]["features_type"] == "animal":
         logging.info("[Train] Aggregating slide → animal features…")
         group_features_by_animal(prepared)
 
-    # Run pre-checks
+    # ---------------------------------------------------------
+    # SANITY CHECK
+    # ---------------------------------------------------------
     check_subset_consistency(prepared)
 
-    # Create dataset object
+    # ---------------------------------------------------------
+    # DATASET
+    # ---------------------------------------------------------
     dataset = ToxicologyDataset(prepared)
 
     input_dim = prepared["data"]["embed_dim"]
@@ -40,17 +56,12 @@ def run_train(cfg):
     probe = build_probe(prepared, input_dim, num_classes)
     ckpt_path = default_probe_path(prepared, exp_root, isinstance(probe, TorchProbe))
 
-    if ckpt_path.exists():
-        logging.warning(
-            f"[Train] Found existing checkpoint: {ckpt_path}\n"
-            f"[Train] Skipping training (nothing to do)."
-        )
-        return
-
+    # ---------------------------------------------------------
+    # TRAIN
+    # ---------------------------------------------------------
     logging.info("[Train] Starting training…")
     probe.fit(dataset)
     probe.save(ckpt_path)
-
 
     logging.info(f"[Train] Saved checkpoint → {ckpt_path}")
     logging.info("========== TRAIN DONE ==========")

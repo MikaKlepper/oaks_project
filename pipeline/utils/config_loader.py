@@ -55,7 +55,7 @@ def incorporate_cli_args(cfg, args):
         cli.aggregation.type = args.agg
 
     # -----------------------------------------
-    # RUNTIME OVERRIDES — ALWAYS MERGE
+    # RUNTIME OVERRIDES
     # -----------------------------------------
     cli.setdefault("runtime", OmegaConf.create())
     for name in ["optimizer", "loss", "device", "lr",
@@ -66,7 +66,7 @@ def incorporate_cli_args(cfg, args):
             cli.runtime[name] = v
 
     # -----------------------------------------
-    # DATASET STAGE
+    # DATASET STAGE (train/val/test)
     # -----------------------------------------
     if args.stage == "train":
         cli.datasets = OmegaConf.create()
@@ -108,10 +108,10 @@ def load_merged_config(config_path, args=None):
     config_path = Path(config_path)
     base_cfg = OmegaConf.load(config_path)
 
-    # 1) Apply CLI args only once (when main.py calls this)
+    # 1) Apply CLI args only once (from main.py)
     cfg, _ = incorporate_cli_args(base_cfg, args)
 
-    # 2) Build dirs based on SPLIT + encoder
+    # 2) Build all directories (raw slide, processed slide, animal)
     dirs = build_feature_dirs(
         cfg.features.features_root,
         cfg.features.encoder,
@@ -119,8 +119,10 @@ def load_merged_config(config_path, args=None):
         cfg.datasets.split,
     )
 
-    cfg.features.slide_dir = str(dirs["slide_dir"])
-    cfg.features.animal_dir = str(dirs["animal_dir"])
+    # Assign ALL THREE DIRS
+    cfg.features.raw_slide_dir = str(dirs["raw_slide_dir"])   # <-- NEW
+    cfg.features.slide_dir     = str(dirs["slide_dir"])
+    cfg.features.animal_dir    = str(dirs["animal_dir"])
 
     # 3) Encoder dims
     pipeline_root = Path(__file__).resolve().parents[1]
@@ -128,7 +130,7 @@ def load_merged_config(config_path, args=None):
     enc_cfg = OmegaConf.load(enc_file)
     cfg.features.embed_dim = enc_cfg.encoder_dims[cfg.features.encoder]
 
-    # 4) Probe override
+    # 4) Probe override (if YAML exists)
     probe_yaml = pipeline_root / "configs" / "probes" / f"{cfg.probe.type}.yaml"
     if probe_yaml.exists():
         cfg = OmegaConf.merge(cfg, OmegaConf.load(probe_yaml))

@@ -1,3 +1,5 @@
+# data/prepare_dataset.py
+
 import pandas as pd
 from pathlib import Path
 
@@ -10,8 +12,10 @@ def _load_metadata(cfg):
     df = pd.read_csv(cfg.data.metadata_csv)
     df = df[df["ORGAN"].str.lower() == cfg.data.organ.lower()].copy()
 
+    # Target label
     df["HasHypertrophy"] = df["findings"].str.contains("Hypertrophy", na=False).astype(int)
 
+    # Optional sub-fields (location, severity)
     df[["Location", "Severity"]] = df["findings"].str.extract(
         r"\['Hypertrophy'\s*,\s*'([^']+)'\s*,\s*'([^']+)'"
     )
@@ -32,14 +36,13 @@ def _select_split_csv(cfg):
     if cfg.datasets.use_subset:
         if cfg.datasets.subset_csv:
             return cfg.datasets.subset_csv
-        else:
-            raise ValueError("use_subset=True but no subset_csv provided")
-    else:
-        return cfg.datasets[cfg.datasets.split]
+        raise ValueError("use_subset=True but no subset_csv provided")
+
+    return cfg.datasets[cfg.datasets.split]
 
 
 # ============================================================
-# SPLIT FILTERING (ANIMAL or SLIDE)
+# FILTER METADATA BY SPLIT CSV
 # ============================================================
 
 def _filter_by_split(df, split_csv, cfg):
@@ -62,7 +65,7 @@ def _filter_by_split(df, split_csv, cfg):
 
 
 # ============================================================
-# FRACTIONAL SUBSET
+# FRACTIONAL SUBSETS
 # ============================================================
 
 def _apply_subset_fraction(df, cfg):
@@ -72,26 +75,25 @@ def _apply_subset_fraction(df, cfg):
 
 
 # ============================================================
-# NEW DIRECTORY SELECTION
+# DIRECTORY SELECTION
 # ============================================================
 
 def _select_feature_dirs(cfg):
     """
-    Uses the new architecture: config_loader already sets:
-
-        cfg.features.slide_dir
-        cfg.features.animal_dir
-
-    to the correct split-specific experiment folders.
+    Directories were already built in config_loader:
+        cfg.features.raw_slide_dir  (raw bags or slide FM)
+        cfg.features.slide_dir      (processed slide-level)
+        cfg.features.animal_dir     (processed animal-level)
     """
     return {
-        "slide_dir": Path(cfg.features.slide_dir),
-        "animal_dir": Path(cfg.features.animal_dir),
+        "raw_slide_dir": Path(cfg.features.raw_slide_dir),  # <-- NEW
+        "slide_dir":     Path(cfg.features.slide_dir),
+        "animal_dir":    Path(cfg.features.animal_dir),
     }
 
 
 # ============================================================
-# MAIN: PREPARE DATASET INPUTS
+# PREPARE DATASET INPUT STRUCTURE
 # ============================================================
 
 def prepare_dataset_inputs(cfg):
@@ -103,17 +105,21 @@ def prepare_dataset_inputs(cfg):
 
     dirs = _select_feature_dirs(cfg)
 
-    # ID selection
+    # -----------------------------------------------
+    # ID selection depending on features_type
+    # -----------------------------------------------
     if cfg.features.type == "animal":
-        ids = df["subject_organ_UID"].tolist()
-        features_dir = dirs["animal_dir"]
+        ids = df["subject_organ_UID"].astype(str).tolist()
+        features_dir = dirs["animal_dir"]  # processed animal embeddings
     else:
-        ids = df["slide_id"].tolist()
-        features_dir = dirs["slide_dir"]
+        ids = df["slide_id"].astype(str).tolist()
+        features_dir = dirs["slide_dir"]   # processed slide embeddings
 
     labels = df["HasHypertrophy"].tolist()
 
-    # FINAL RETURN STRUCTURE
+    # -----------------------------------------------
+    # FINAL return structure
+    # -----------------------------------------------
     return {
         "data": {
             "df": df,
@@ -121,21 +127,27 @@ def prepare_dataset_inputs(cfg):
             "labels": labels,
             "num_classes": len(set(labels)),
 
-            "slide_dir": dirs["slide_dir"],
+            # All directories
+            "raw_slide_dir": dirs["raw_slide_dir"],
+            "slide_dir":     dirs["slide_dir"],
+            "animal_dir":    dirs["animal_dir"],
+
+            # The directory from which the Dataset will load .pt files:
             "features_dir": features_dir,
 
+            # split info
             "split": cfg.datasets.split,
             "subset_csv": cfg.datasets.subset_csv if cfg.datasets.use_subset else None,
-
             "train_csv": cfg.datasets.train,
-            "val_csv": cfg.datasets.val,
-            "test_csv": cfg.datasets.test,
+            "val_csv":   cfg.datasets.val,
+            "test_csv":  cfg.datasets.test,
 
+            # feature options
             "aggregate": cfg.aggregation.type,
             "embed_dim": cfg.features.embed_dim,
             "features_type": cfg.features.type,
             "use_cache": cfg.features.use_cache,
-            "d_type": cfg.features.d_type
+            "d_type": cfg.features.d_type,
         },
 
         "runtime": {

@@ -1,6 +1,6 @@
 # Base configuration for the OAKS Toxicology Pipeline
 
-experiment_root: "outputs/experiments/${features.encoder}/${probe.type}/k${fewshot.k}"
+experiment_root: "outputs/experiments_benchmark/${features.encoder}/${probe.type}/k${fewshot.k}"
 
 data:
   project_root: "/data/temporary/mika/repos/oaks_project"

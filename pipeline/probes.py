@@ -75,6 +75,8 @@ class TorchProbeConfig:
     momentum: float
     loss: str
     num_workers: int = 4
+    patience: int = 10
+    rel_tolerance: float = 0.01  # relative tolerance for early stopping
 
     def make_loss(self):
         name = self.loss.lower()
@@ -144,6 +146,10 @@ class TorchProbe(BaseProbe):
         best_state = None
         global_step = 0
 
+        # early stopping
+        patience = self.cfg.patience
+        best_epoch = 0
+
         for epoch in range(self.cfg.epochs):
             self.model.train()
             running_loss = 0.0
@@ -177,10 +183,25 @@ class TorchProbe(BaseProbe):
                 f"[TorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
                 f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
             )
-
-            if epoch_loss < best_loss:
+            # early stopping check
+            improvement = best_loss - epoch_loss
+            required_improvement = best_loss * self.cfg.rel_tolerance
+            if best_loss == float("inf") or improvement > required_improvement:
+                # Accept improvement or first epoch
                 best_loss = epoch_loss
-                best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+                best_epoch = epoch
+                best_state = {
+                    k: v.cpu().clone()
+                    for k, v in self.model.state_dict().items()
+                }
+            else:
+                # No significant improvement
+                if epoch - best_epoch >= patience:
+                    tqdm.write(
+                        f"[TorchProbe] Early stopping at epoch {epoch+1} "
+                        f"(no improvement for {patience} epochs)"
+                    )
+                    break
 
         if best_state:
             self.model.load_state_dict(best_state)
@@ -313,19 +334,6 @@ class SklearnProbe(BaseProbe):
         self.model = joblib.load(path)
         logging.info(f"[SklearnProbe] Loaded sklearn model from {path}")
 
-
-# ============================================================
-# # Helper: default checkpoint path
-# # ============================================================
-# def default_probe_path(prepared, exp_root: Path, is_torch: bool) -> Path:
-#     """
-#     Returns a default path like:
-#         exp_root / "probe_linear.pt"  (torch)
-#         exp_root / "probe_logreg.joblib" (sklearn)
-#     """
-#     probe_name = str(prepared["probe"]["type"]).lower()
-#     ext = "pt" if is_torch else "joblib"
-#     return Path(exp_root) / f"probe_{probe_name}.{ext}"
 
 
 
