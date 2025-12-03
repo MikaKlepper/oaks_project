@@ -3,56 +3,45 @@
 from pathlib import Path
 
 
-def build_feature_dirs(features_root: str, encoder: str, exp_root: str, split: str):
+def build_feature_dirs(features_root: str, encoder: str, cache_root: str, split: str):
     """
-    Directory layout:
+    NEW DESIGN: GLOBAL CACHING ONLY
 
     RAW SLIDE FEATURES (input):
-        /data/.../Trainings_FM/<ENC>/features
-        /data/.../Validations_FM/<ENC>/features
-        /data/.../Tests_FM/<ENC>/features
+        <features_root>/Trainings_FM/<ENC>/features
+        <features_root>/Validations_FM/<ENC>/features
+        <features_root>/Tests_FM/<ENC>/features
 
-    PROCESSED SLIDE FEATURES (output):
-        <exp_root>/<split>/slide_features/
+    PROCESSED SLIDE FEATURES (cached):
+        <cache_root>/<ENC>/<split>/slides/
 
-    PROCESSED ANIMAL FEATURES (output):
-        <exp_root>/<split>/animal_features/
+    PROCESSED ANIMAL FEATURES (cached):
+        <cache_root>/<ENC>/<split>/animals/
     """
 
     encoder = encoder.upper()
-    root = Path(features_root)
-    exp = Path(exp_root)
 
-    # ----------------------------------------
-    # RAW slide features (from TG-GATES)
-    # ----------------------------------------
+    # ---------------------------------------------------------
+    # RAW input directory from TG-GATES
+    # ---------------------------------------------------------
     raw_slide_dirs = {
-        "train": root / "Trainings_FM"   / encoder / "features",
-        "val":   root / "Validations_FM" / encoder / "features",
-        "test":  root / "Tests_FM"       / encoder / "features",
+        "train": Path(features_root) / "Trainings_FM"   / encoder / "features",
+        "val":   Path(features_root) / "Validations_FM" / encoder / "features",
+        "test":  Path(features_root) / "Tests_FM"       / encoder / "features",
     }
 
-    # ----------------------------------------
-    # PROCESSED directories inside experiment
-    # ----------------------------------------
-    slide_dirs = {
-        "train": exp / "train" / "slide_features",
-        "val":   exp / "eval"  / "slide_features",
-        "test":  exp / "test"  / "slide_features",
-    }
+    # ---------------------------------------------------------
+    # GLOBAL FEATURE CACHE
+    # ---------------------------------------------------------
+    slide_dir  = Path(cache_root) / encoder / split / "slides"
+    animal_dir = Path(cache_root) / encoder / split / "animals"
 
-    animal_dirs = {
-        "train": exp / "train" / "animal_features",
-        "val":   exp / "eval"  / "animal_features",
-        "test":  exp / "test"  / "animal_features",
-    }
-
-    # Ensure directories exist
-    slide_dirs[split].mkdir(parents=True, exist_ok=True)
-    animal_dirs[split].mkdir(parents=True, exist_ok=True)
+    # Make sure directories exist
+    slide_dir.mkdir(parents=True, exist_ok=True)
+    animal_dir.mkdir(parents=True, exist_ok=True)
 
     return {
         "raw_slide_dir": raw_slide_dirs[split],
-        "slide_dir": slide_dirs[split],
-        "animal_dir": animal_dirs[split],
+        "slide_dir": slide_dir,
+        "animal_dir": animal_dir,
     }

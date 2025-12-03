@@ -5,97 +5,101 @@ from pathlib import Path
 
 class ToxicologyDataset(Dataset):
     """
-    FINAL LEAN VERSION
+    FINAL VERSION — aligned with global slide/animal cache system.
 
-    EXPECTED INPUTS (from prepare_dataset_inputs):
-
-        features_type='slide'  → features_dir contains FINAL processed slide embeddings (D,)
-        features_type='animal' → features_dir contains FINAL animal embeddings (D,)
-
-    This Dataset:
-        - NEVER loads raw tile bags
-        - NEVER performs aggregation
-        - ONLY loads final (D,) tensors
-
-    Output per sample:
-        feats: (D,)
-        label: long
+    Expected in prepared["data"]:
+        features_type : "slide" or "animal"
+        slide_dir     : directory with final slide embeddings (D,)
+        animal_dir    : directory with final animal embeddings (D,)
+        embed_dim     : expected D
+        ids           : sample IDs
+        labels        : sample labels
+        use_cache     : optional RAM caching
     """
 
     def __init__(self, prepared):
         data = prepared["data"]
 
-        # Basic identifiers
-        self.ids = list(data["ids"])
+        # -----------------------------------------------
+        # Basic metadata
+        # -----------------------------------------------
+        self.ids    = list(data["ids"])
         self.labels = list(data["labels"])
+
         if len(self.ids) != len(self.labels):
-            raise ValueError("IDs and labels mismatch")
+            raise ValueError("[DATA] IDs and labels mismatch")
 
-        # IMPORTANT:
-        # Directory now ALWAYS contains final (D,) embeddings:
-        #   slide → created by process_slide_features()
-        #   animal → created by group_features_by_animal()
-        self.features_dir = Path(data["features_dir"])
+        # -----------------------------------------------
+        # Feature type: slide | animal
+        # -----------------------------------------------
         self.features_type = data.get("features_type", "slide").lower()
-        self.dtype = getattr(torch, data.get("d_type", "float32"))
 
-        if self.features_type not in ("slide", "animal"):
-            raise ValueError("features_type must be 'slide' or 'animal'")
+        if self.features_type == "slide":
+            self.features_dir = Path(data["slide_dir"])
+        elif self.features_type == "animal":
+            self.features_dir = Path(data["animal_dir"])
+        else:
+            raise ValueError("[DATA] features_type must be 'slide' or 'animal'")
 
-        # Optional in-RAM caching of (D,) vectors
+        if not self.features_dir.exists():
+            raise FileNotFoundError(f"[DATA] Features directory missing: {self.features_dir}")
+
+        self.embed_dim = int(data["embed_dim"])
+        self.dtype     = getattr(torch, data.get("d_type", "float32"))
+
+        # -----------------------------------------------
+        # Optional RAM cache
+        # -----------------------------------------------
         self.use_cache = bool(data.get("use_cache", False))
         self.cache = {} if self.use_cache else None
 
         if self.use_cache:
-            print(f"[DATA] Preloading {len(self.ids)} precomputed embeddings…")
+            print(f"[DATA] Preloading {len(self.ids)} embeddings from {self.features_dir}…")
             self._preload_all()
             print("[DATA] Preloading complete.\n")
 
     def __len__(self):
         return len(self.ids)
 
-    # ------------------------------------------------------------------
-    # PRELOAD small (D,) vectors into RAM
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # RAM PRELOAD
+    # ------------------------------------------------------------
     def _preload_all(self):
         for _id in self.ids:
-            f = self.features_dir / f"{_id}.pt"
-            if not f.exists():
-                raise FileNotFoundError(f"Missing precomputed feature: {f}")
-
-            x = torch.load(f, map_location="cpu").to(self.dtype)
-
-            # Guarantee 1D (D,)
-            if x.ndim > 1:
-                x = x.squeeze(0)
-
+            x = self._load_feature_from_disk(_id)
             self.cache[_id] = x
 
-    # ------------------------------------------------------------------
-    # LOAD a single precomputed embedding from disk
-    # ------------------------------------------------------------------
-    def _load_single(self, _id):
+    # ------------------------------------------------------------
+    # Disk loader — safe and strict
+    # ------------------------------------------------------------
+    def _load_feature_from_disk(self, _id):
         f = self.features_dir / f"{_id}.pt"
+
         if not f.exists():
-            raise FileNotFoundError(f"Missing precomputed feature: {f}")
+            raise FileNotFoundError(
+                f"[DATA] Missing feature file for ID {_id}: {f}\n"
+                "→ Run process_slide_features() or group_features_by_animal() first."
+            )
 
         x = torch.load(f, map_location="cpu").to(self.dtype)
 
-        # Guarantee 1D (D,)
+        # Guarantee final shape (D,)
         if x.ndim > 1:
-            x = x.squeeze(0)
+            x = x.flatten()
+
+        if x.numel() != self.embed_dim:
+            raise ValueError(
+                f"[DATA] Feature {_id} has wrong dimension {x.numel()} "
+                f"(expected {self.embed_dim}) in {f}"
+            )
 
         return x
 
-    # ------------------------------------------------------------------
-    # Dataset interface
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # PyTorch interface
+    # ------------------------------------------------------------
     def __getitem__(self, idx):
         _id = self.ids[idx]
-
-        # Use RAM cache or disk load
-        feats = self.cache[_id] if self.use_cache else self._load_single(_id)
-
+        feats = self.cache[_id] if self.use_cache else self._load_feature_from_disk(_id)
         label = torch.tensor(self.labels[idx], dtype=torch.long)
-
         return feats, label

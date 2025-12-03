@@ -1,0 +1,5 @@
+probe:
+  type: "knn"
+  knn_neighbors: 5
+  hidden_dim: null
+  num_layers: null

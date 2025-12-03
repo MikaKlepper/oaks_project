@@ -29,8 +29,9 @@ features:
   # "MIDNIGHT12K","PRISM", "RESNET50", "HIBOU_B", "HIBOU_L", "PROV_GIGAPATH_224_SLIDE",
   # "PROV_GIGAPATH_256_SLIDE", "PROV_GIGAPATH_224_TILE", "PROV_GIGAPATH_256_TILE"]
   features_root: "/data/temporary/toxicology/TG-GATES/liver"
+  cache_root: "/data/temporary/mika/repos/oaks_project/pipeline/outputs/cache"
 
-  type: "animal" # choices ["animal", "slide"]
+  feature_type: "animal" # choices ["animal", "slide"]
 
   # train_animal_dir: "${features.features_root}/Trainings_FM/${features.encoder}/animal_features"
   # train_slide_dir:   "${features.features_root}/Trainings_FM/${features.encoder}/features"

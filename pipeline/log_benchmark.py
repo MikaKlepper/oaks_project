@@ -2,14 +2,13 @@
 import pandas as pd
 from pathlib import Path
 
-BENCHMARK_FILE = Path("outputs/benchmark_results.csv")
-
 def log_benchmark(cfg, metrics):
+    BENCHMARK_FILE = Path("outputs/benchmark_results.csv")
     row = {
         "encoder": cfg.features.encoder,
         "probe": cfg.probe.type,
         "k_shot": cfg.fewshot.k,
-        "features_type": cfg.features.type,   # FIXED
+        "feature_type": cfg.features.feature_type,   
         "split": cfg.datasets.split,
         "accuracy": metrics["accuracy"],
         "precision": metrics["precision"],

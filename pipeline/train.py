@@ -7,9 +7,9 @@ from argparser import get_args
 from utils.config_loader import load_merged_config
 from data.prepare_dataset import prepare_dataset_inputs
 
-# NEW order: slides first, animals after
 from data.process_slide_features import process_slide_features
 from data.features_per_animal import group_features_by_animal
+from utils.feature_cache import ensure_cached_features
 
 from data.create_datasets import ToxicologyDataset
 from data.dataset_check import check_subset_consistency
@@ -18,36 +18,23 @@ from probes import build_probe, TorchProbe, default_probe_path
 from logger import setup_logger
 
 
+
 def run_train(cfg):
     exp_root = Path(cfg.experiment_root)
     setup_logger(exp_root)
 
     logging.info("========== TRAIN ==========")
 
-    # ---------------- LOAD + PREPARE DATA ----------------
+    # ---------------- LOAD DATA ----------------
     prepared = prepare_dataset_inputs(cfg)
 
-    # ---------------------------------------------------------
-    # ALWAYS PROCESS SLIDE FEATURES FIRST (produces final (D,) slide vectors)
-    # ---------------------------------------------------------
-    logging.info("[Train] Processing slide → final (D,) slide features…")
-    process_slide_features(prepared)
+    # ---------------- FEATURE CACHING ----------------
+    ensure_cached_features(prepared)
 
-    # ---------------------------------------------------------
-    # IF ANIMAL MODE → THEN aggregate slides → animal (D,) embeddings
-    # ---------------------------------------------------------
-    if prepared["data"]["features_type"] == "animal":
-        logging.info("[Train] Aggregating slide → animal features…")
-        group_features_by_animal(prepared)
-
-    # ---------------------------------------------------------
-    # SANITY CHECK
-    # ---------------------------------------------------------
+    # ---------------- SANITY CHECK ----------------
     check_subset_consistency(prepared)
 
-    # ---------------------------------------------------------
-    # DATASET
-    # ---------------------------------------------------------
+    # ---------------- DATASET ----------------
     dataset = ToxicologyDataset(prepared)
 
     input_dim = prepared["data"]["embed_dim"]
@@ -56,9 +43,7 @@ def run_train(cfg):
     probe = build_probe(prepared, input_dim, num_classes)
     ckpt_path = default_probe_path(prepared, exp_root, isinstance(probe, TorchProbe))
 
-    # ---------------------------------------------------------
-    # TRAIN
-    # ---------------------------------------------------------
+    # ---------------- TRAIN ----------------
     logging.info("[Train] Starting training…")
     probe.fit(dataset)
     probe.save(ckpt_path)
@@ -69,13 +54,10 @@ def run_train(cfg):
 
 if __name__ == "__main__":
     args = get_args()
-
-    # The config passed to train.py is already final & merged.
     cfg = load_merged_config(args.config, args=None)
 
     run_train(cfg)
 
-    # HARD GPU RESET
     import torch, gc
     torch.cuda.empty_cache()
     gc.collect()

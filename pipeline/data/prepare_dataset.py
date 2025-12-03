@@ -5,20 +5,21 @@ from pathlib import Path
 
 
 # ============================================================
-# METADATA LOADING
+# LOAD METADATA
 # ============================================================
 
 def _load_metadata(cfg):
     df = pd.read_csv(cfg.data.metadata_csv)
     df = df[df["ORGAN"].str.lower() == cfg.data.organ.lower()].copy()
 
-    # Target label
+    # Hypertrophy label
     df["HasHypertrophy"] = df["findings"].str.contains("Hypertrophy", na=False).astype(int)
 
-    # Optional sub-fields (location, severity)
+    # Optional fields
     df[["Location", "Severity"]] = df["findings"].str.extract(
-        r"\['Hypertrophy'\s*,\s*'([^']+)'\s*,\s*'([^']+)'"
+        r"\['Hypertrophy'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\]"
     )
+
     df["Location"] = df["Location"].where(df["HasHypertrophy"] == 1)
     df["Severity"] = df["Severity"].where(df["HasHypertrophy"] == 1)
 
@@ -29,15 +30,16 @@ def _load_metadata(cfg):
 
 
 # ============================================================
-# SPLIT CSV SELECTION
+# DETERMINE WHICH CSV DEFINES THE SPLIT
 # ============================================================
 
 def _select_split_csv(cfg):
     if cfg.datasets.use_subset:
         if cfg.datasets.subset_csv:
             return cfg.datasets.subset_csv
-        raise ValueError("use_subset=True but no subset_csv provided")
+        raise ValueError("use_subset=True but subset_csv missing")
 
+    # Normal full split
     return cfg.datasets[cfg.datasets.split]
 
 
@@ -50,7 +52,7 @@ def _filter_by_split(df, split_csv, cfg):
         return df
 
     split_df = pd.read_csv(split_csv)
-    ftype = cfg.features.type  # "animal" or "slide"
+    ftype = cfg.features.feature_type  # FIXED
 
     if ftype == "animal":
         ids = split_df["subject_organ_UID"].astype(str).tolist()
@@ -61,11 +63,11 @@ def _filter_by_split(df, split_csv, cfg):
         return df[df["slide_id"].astype(str).isin(ids)].reset_index(drop=True)
 
     else:
-        raise ValueError(f"Unknown features.type: {ftype}")
+        raise ValueError(f"Unknown features.features_type: {ftype}")
 
 
 # ============================================================
-# FRACTIONAL SUBSETS
+# APPLY OPTIONAL FRACTIONAL SUBSET
 # ============================================================
 
 def _apply_subset_fraction(df, cfg):
@@ -75,25 +77,19 @@ def _apply_subset_fraction(df, cfg):
 
 
 # ============================================================
-# DIRECTORY SELECTION
+# DIRECTORIES — now ALWAYS coming from cfg.data
 # ============================================================
 
 def _select_feature_dirs(cfg):
-    """
-    Directories were already built in config_loader:
-        cfg.features.raw_slide_dir  (raw bags or slide FM)
-        cfg.features.slide_dir      (processed slide-level)
-        cfg.features.animal_dir     (processed animal-level)
-    """
     return {
-        "raw_slide_dir": Path(cfg.features.raw_slide_dir),  # <-- NEW
-        "slide_dir":     Path(cfg.features.slide_dir),
-        "animal_dir":    Path(cfg.features.animal_dir),
+        "raw_slide_dir": Path(cfg.data.raw_slide_dir),
+        "slide_dir":     Path(cfg.data.slide_dir),
+        "animal_dir":    Path(cfg.data.animal_dir),
     }
 
 
 # ============================================================
-# PREPARE DATASET INPUT STRUCTURE
+# PREPARE FINAL INPUT STRUCTURE
 # ============================================================
 
 def prepare_dataset_inputs(cfg):
@@ -105,21 +101,24 @@ def prepare_dataset_inputs(cfg):
 
     dirs = _select_feature_dirs(cfg)
 
-    # -----------------------------------------------
-    # ID selection depending on features_type
-    # -----------------------------------------------
-    if cfg.features.type == "animal":
+    ftype = cfg.features.feature_type
+
+    # -------------------------------------------------------
+    # ID SELECTION
+    # -------------------------------------------------------
+    if ftype == "animal":
         ids = df["subject_organ_UID"].astype(str).tolist()
-        features_dir = dirs["animal_dir"]  # processed animal embeddings
+        features_dir = dirs["animal_dir"]
     else:
         ids = df["slide_id"].astype(str).tolist()
-        features_dir = dirs["slide_dir"]   # processed slide embeddings
+        features_dir = dirs["slide_dir"]
 
     labels = df["HasHypertrophy"].tolist()
 
-    # -----------------------------------------------
-    # FINAL return structure
-    # -----------------------------------------------
+    # -------------------------------------------------------
+    # FINAL return dict used by Dataset + Train + Eval
+    # -------------------------------------------------------
+
     return {
         "data": {
             "df": df,
@@ -127,15 +126,14 @@ def prepare_dataset_inputs(cfg):
             "labels": labels,
             "num_classes": len(set(labels)),
 
-            # All directories
+            # DIRS
             "raw_slide_dir": dirs["raw_slide_dir"],
             "slide_dir":     dirs["slide_dir"],
             "animal_dir":    dirs["animal_dir"],
 
-            # The directory from which the Dataset will load .pt files:
             "features_dir": features_dir,
 
-            # split info
+            # meta
             "split": cfg.datasets.split,
             "subset_csv": cfg.datasets.subset_csv if cfg.datasets.use_subset else None,
             "train_csv": cfg.datasets.train,
@@ -145,7 +143,7 @@ def prepare_dataset_inputs(cfg):
             # feature options
             "aggregate": cfg.aggregation.type,
             "embed_dim": cfg.features.embed_dim,
-            "features_type": cfg.features.type,
+            "features_type": ftype,
             "use_cache": cfg.features.use_cache,
             "d_type": cfg.features.d_type,
         },

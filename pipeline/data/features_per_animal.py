@@ -5,108 +5,125 @@ from tqdm import tqdm
 import os
 
 
-def load_pt(path):
-    """Load a processed slide embedding (D,) or raw slide FM (1,D)."""
+# -----------------------------
+# Safe loader for (D,) slide embeddings
+# -----------------------------
+def load_pt(path: Path):
+    """
+    Loads a processed slide embedding.
+    Should always be (D,) since slide stage already aggregated.
+    """
     x = torch.load(path, map_location="cpu")
 
-    if x.ndim == 1:
-        x = x.unsqueeze(0)
-    elif x.ndim == 2:
-        pass
-    else:
-        raise ValueError(f"Invalid feature shape {x.shape} in {path}")
+    if x.ndim != 1:
+        raise ValueError(f"[ERROR] Expected (D,) slide vector, got {tuple(x.shape)} in {path}")
 
     return x
 
 
+
+# -----------------------------
+# MAIN: Aggregate processed slides → animal embeddings
+# -----------------------------
 def group_features_by_animal(
     prepared,
-    max_processes=min(os.cpu_count(), 32),
+    max_processes=min(os.cpu_count(), 16),
     min_completion_ratio=0.9,
 ):
-    """
-    Correct design:
-
-        INPUT  = prepared["data"]["slide_dir"]      <-- processed slide embeddings
-        OUTPUT = prepared["data"]["animal_dir"]     <-- animal-level embeddings
-    """
-
     data = prepared["data"]
     df = data["df"]
 
-    # *** CORRECTED DIRECTORY ***
-    slide_feat_dir = Path(data["slide_dir"])   # always read slides from here
-    out_dir        = Path(data["animal_dir"])  # always save animals here
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Read processed slide features
+    slide_dir = Path(data["slide_dir"])
+    animal_dir = Path(data["animal_dir"])
+    animal_dir.mkdir(parents=True, exist_ok=True)
 
-    embed_dim = data["embed_dim"]
+    embed_dim = int(data["embed_dim"])
     aggregate = data.get("aggregate", "mean")
 
+    # Group all slide IDs by animal_id
     groups = df.groupby("subject_organ_UID")["slide_id"].apply(list)
     animals = list(groups.index)
 
-    print(f"[ANIMAL] Using {max_processes} worker processes…")
-    print(f"[ANIMAL] Input slide features: {slide_feat_dir}")
-    print(f"[ANIMAL] Output animal features: {out_dir}\n")
+    print(f"[ANIMAL] Starting animal-level aggregation")
+    print(f"[ANIMAL] Input slides : {slide_dir}")
+    print(f"[ANIMAL] Output animals: {animal_dir}")
+    print(f"[ANIMAL] Workers: {max_processes}, min completion: {min_completion_ratio}\n")
 
+    # -----------------------------
+    # Create worker pool
+    # -----------------------------
     pool = ProcessPoolExecutor(max_workers=max_processes)
 
     try:
         for animal in tqdm(animals, ncols=120):
-            outpath = out_dir / f"{animal}.pt"
+            out_path = animal_dir / f"{animal}.pt"
 
-            # Skip if already computed
-            if outpath.exists():
+            # Skip if already cached
+            if out_path.exists():
                 continue
 
             slide_ids = groups[animal]
-            slide_paths = [slide_feat_dir / f"{sid}.pt" for sid in slide_ids]
+            slide_paths = [slide_dir / f"{sid}.pt" for sid in slide_ids]
 
-            # Load all slide embeddings for this animal
-            futures = {pool.submit(load_pt, p): p for p in slide_paths if p.exists()}
+            # Filter missing slides
+            existing = [p for p in slide_paths if p.exists()]
+            missing_count = len(slide_paths) - len(existing)
+
+            if missing_count > 0:
+                print(f"[WARN] Animal {animal}: {missing_count} missing slide files")
+
+            if len(existing) == 0:
+                print(f"[SKIP] Animal {animal} has no valid slide feature files")
+                continue
+
+            # -----------------------------
+            # Submit tasks
+            # -----------------------------
+            futures = {pool.submit(load_pt, p): p for p in existing}
 
             feats = []
             for fut in as_completed(futures):
+                p = futures[fut]
                 try:
                     feats.append(fut.result())
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[ERR] Failed loading slide {p}: {e}")
 
-            total_exp = len(slide_paths)
-            total_got = len(feats)
-
-            if total_exp == 0:
-                print(f"[ERR] Animal {animal} has zero slide IDs in split.")
-                continue
-
-            ratio = total_got / total_exp
+            total_expected = len(slide_paths)
+            total_loaded = len(feats)
+            ratio = total_loaded / total_expected
 
             if ratio < min_completion_ratio:
-                print(f"[SKIP] {animal}: only {total_got}/{total_exp} slides available")
+                print(f"[SKIP] {animal}: {total_loaded}/{total_expected} loaded ({ratio:.1%}) < threshold")
                 continue
 
-            # Combine slide embeddings
-            big = torch.cat(feats, dim=0)
+            # -----------------------------
+            # Stack (N, D) into final animal vector
+            # -----------------------------
+            big = torch.stack(feats, dim=0)  # (Nslides, D)
 
-            # Final pooling
             if aggregate == "mean":
-                reduced = big.mean(0)
+                animal_vec = big.mean(0)
             elif aggregate == "max":
-                reduced = big.max(0)[0]
+                animal_vec = big.max(0).values
             elif aggregate == "min":
-                reduced = big.min(0)[0]
+                animal_vec = big.min(0).values
             else:
-                raise ValueError(f"Unknown aggregation: {aggregate}")
+                raise ValueError(f"[ERROR] Unknown aggregation '{aggregate}'")
 
-            # Verify shape
-            if reduced.numel() != embed_dim:
-                print(f"[SKIP] Wrong dim for {animal}: {reduced.numel()} vs expected {embed_dim}")
+            # Validate dimension
+            if animal_vec.numel() != embed_dim:
+                print(
+                    f"[SKIP] Wrong dimension for {animal}: {animal_vec.numel()} "
+                    f"(expected {embed_dim})"
+                )
                 continue
 
-            torch.save(reduced, outpath)
+            torch.save(animal_vec, out_path)
 
     finally:
-        print("[CLEANUP] Shutting down workers…")
+        print("[CLEANUP] Shutting down animal aggregation workers…")
         pool.shutdown(wait=True, cancel_futures=True)
 
-    print("[ANIMAL] Animal feature creation complete.\n")
+    print("\n[ANIMAL] Animal-level feature creation complete.\n")
