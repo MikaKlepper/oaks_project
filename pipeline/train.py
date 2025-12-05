@@ -43,6 +43,11 @@ def run_train(cfg):
     probe = build_probe(prepared, input_dim, num_classes)
     ckpt_path = default_probe_path(prepared, exp_root, isinstance(probe, TorchProbe))
 
+    # ---------------- CHECKPOINT ----------------
+    # Skip training if checkpoint already exists
+    if ckpt_path.exists():
+        logging.info(f"[Train] Checkpoint already exists → skipping training.")
+        return
     # ---------------- TRAIN ----------------
     logging.info("[Train] Starting training…")
     probe.fit(dataset)

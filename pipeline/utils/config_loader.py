@@ -124,6 +124,7 @@ def load_merged_config(config_path, args=None):
         encoder=cfg.features.encoder,
         cache_root=cfg.features.cache_root,   # NEW GLOBAL CACHE LOCATION
         split=cfg.datasets.split,
+        aggregation=cfg.aggregation.type
     )
 
     # Assign dirs to cfg.data — NOT cfg.features

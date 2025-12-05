@@ -391,8 +391,10 @@ def build_probe(prepared, input_dim: int, num_classes: int) -> BaseProbe:
         return SklearnProbe(LogisticRegression(max_iter=1000, n_jobs=-1))
     if t == "knn":
         return SklearnProbe(KNeighborsClassifier(n_neighbors=p["knn_neighbors"], n_jobs=-1))
+    # if t == "svm_linear":
+    #     return SklearnProbe(LinearSVC())
     if t == "svm_linear":
-        return SklearnProbe(LinearSVC())
+        return SklearnProbe(SVC(kernel="linear", probability=True))
     if t == "svm_rbf":
         return SklearnProbe(SVC(kernel="rbf", probability=True))
 

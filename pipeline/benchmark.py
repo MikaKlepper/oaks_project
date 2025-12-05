@@ -31,37 +31,32 @@ ENCODERS = [
     "PROV_GIGAPATH_256_TILE",
 ]
 
-PROBES = [
-    "linear",
-    "mlp",
-    "logreg",
-    "knn",
-    "svm_linear",
-    "svm_rbf",
-]
+PROBES = ["svm_linear"]
 
 K_VALUES = [100, 80, 40, 20, 5, 1]
 
-EPOCHS = 100  # You can override this easily
+AGGREGATION_METHODS = ["mean", "max", "min"]  # add/remove as you want
+
+EPOCHS = 100
 
 
 # ============================================================
 # Helpers
 # ============================================================
 
-def experiment_exists(model, probe, k):
+def experiment_exists(model, probe, k, agg):
     """
-    Checks whether an experiment is already finished 
-    (metrics.json exists → evaluation completed).
+    Checks whether an experiment has finished already:
+    metrics.json must exist (TRAIN + EVAL done)
     """
-    exp_root = Path(f"outputs/experiments_benchmark/{model}/{probe}/k{k}")
+    exp_root = Path(f"outputs/experiments_benchmark/{agg}/{model}/{probe}/k{k}")
     metrics_file = exp_root / "eval" / "metrics" / "metrics.json"
     return metrics_file.exists()
 
 
-def run_experiment(model, probe, k):
+def run_experiment(model, probe, k, agg):
     """
-    Launch main.py for TRAIN → EVAL.
+    Launch main.py with aggregation override.
     """
     cmd = [
         sys.executable,
@@ -70,12 +65,13 @@ def run_experiment(model, probe, k):
         "--model", model,
         "--probe", probe,
         "--k", str(k),
+        "--agg", agg,            # <--- NEW aggregation override
         "--epochs", str(EPOCHS),
         "--stage", "all",
     ]
 
     print("\n====================================================")
-    print(f"[BENCHMARK] Running MODEL={model} | PROBE={probe} | k={k}")
+    print(f"[BENCHMARK] MODEL={model} | PROBE={probe} | k={k} | AGG={agg}")
     print("====================================================")
     print(" ".join(cmd))
     print("----------------------------------------------------")
@@ -88,25 +84,25 @@ def run_experiment(model, probe, k):
 # ============================================================
 
 def run_benchmark():
-    total = len(ENCODERS) * len(PROBES) * len(K_VALUES)
+    total = len(ENCODERS) * len(PROBES) * len(K_VALUES) * len(AGGREGATION_METHODS)
     print(f"[BENCHMARK] Total experiments to run: {total}")
 
-    for model, probe, k in itertools.product(ENCODERS, PROBES, K_VALUES):
+    for model, probe, k, agg in itertools.product(ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS):
 
-        if experiment_exists(model, probe, k):
-            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} already done.")
+        if experiment_exists(model, probe, k, agg):
+            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already done.")
             continue
 
         try:
-            run_experiment(model, probe, k)
+            run_experiment(model, probe, k, agg)
         except subprocess.CalledProcessError as err:
-            print(f"[ERROR] Failed: MODEL={model} PROBE={probe} k={k}")
+            print(f"[ERROR] MODEL={model} PROBE={probe} k={k} agg={agg}")
             print(err)
             time.sleep(3)
             continue
 
-        print(f"[DONE] MODEL={model} PROBE={probe} k={k}\n")
-        time.sleep(1)  # Optional pacing
+        print(f"[DONE] MODEL={model} PROBE={probe} k={k} agg={agg}\n")
+        time.sleep(1)
 
 
 if __name__ == "__main__":

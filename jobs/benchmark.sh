@@ -8,7 +8,7 @@
 #SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-benchmark.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=high
+#SBATCH --qos=low
 #SBATCH --requeue
 
 

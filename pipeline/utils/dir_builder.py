@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-def build_feature_dirs(features_root: str, encoder: str, cache_root: str, split: str):
+def build_feature_dirs(features_root: str, encoder: str, cache_root: str, split: str, aggregation: str):
     """
     NEW DESIGN: GLOBAL CACHING ONLY
 
@@ -20,6 +20,7 @@ def build_feature_dirs(features_root: str, encoder: str, cache_root: str, split:
     """
 
     encoder = encoder.upper()
+    agg = aggregation.lower()
 
     # ---------------------------------------------------------
     # RAW input directory from TG-GATES
@@ -33,8 +34,8 @@ def build_feature_dirs(features_root: str, encoder: str, cache_root: str, split:
     # ---------------------------------------------------------
     # GLOBAL FEATURE CACHE
     # ---------------------------------------------------------
-    slide_dir  = Path(cache_root) / encoder / split / "slides"
-    animal_dir = Path(cache_root) / encoder / split / "animals"
+    slide_dir  = Path(cache_root) / agg/  encoder / split / "slides"
+    animal_dir = Path(cache_root) / agg /encoder / split / "animals"
 
     # Make sure directories exist
     slide_dir.mkdir(parents=True, exist_ok=True)
