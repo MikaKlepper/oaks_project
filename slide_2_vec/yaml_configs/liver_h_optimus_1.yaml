@@ -1,13 +1,13 @@
 #csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/FewShotCompoundBalanced/train_balanced_fewshot_subset_paths_scratch.csv"
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/test_scractch.csv"
 # output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # output directory
 # resume: true # resume from a previous run
 # resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # directory name to resume from
 
-output_dir: "/scratch_mikaklepper_train/outputs/H_OPTIMUS_1"  # temporary scratch output directory
+output_dir: "/scratch_mikaklepper_test/outputs/H_OPTIMUS_1"  # temporary scratch output directory
 
 resume: true  # resume from a previous run if outputs already exist
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Trainings_FM/H_OPTIMUS_1" # scratch directory to resume from
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1" # scratch directory to resume from
 
 visualize: true # save a visualization of slide tiling in a .jpg
 

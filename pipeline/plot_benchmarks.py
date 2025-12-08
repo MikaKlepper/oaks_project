@@ -4,12 +4,10 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
 
-BENCHMARK_FILE = Path("outputs/benchmark_results.csv") # UPDATE THIS
 
-# ==============================================================
-# Prettify encoder names
-# ==============================================================
-
+# ==========================================================
+# Pretty names for encoders
+# ==========================================================
 def prettify(name: str) -> str:
     mapping = {
         "H_OPTIMUS_1": "H-Optimus-1",
@@ -33,10 +31,9 @@ def prettify(name: str) -> str:
     return mapping.get(name, name.replace("_", "-"))
 
 
-# ==============================================================
-# Global Seaborn + Matplotlib Styling
-# ==============================================================
-
+# ==========================================================
+# Global styling
+# ==========================================================
 sns.set_theme(style="whitegrid", font_scale=1.25)
 
 mpl.rcParams.update({
@@ -48,40 +45,26 @@ mpl.rcParams.update({
 })
 
 
-# ==============================================================
-# SEABORN LEARNING CURVE PLOTS (per probe)
-# ==============================================================
-
-def plot_learning_curve():
-    if not BENCHMARK_FILE.exists():
-        print("[ERROR] Missing benchmark file.")
-        return
-
-    df = pd.read_csv(BENCHMARK_FILE)
+# ==========================================================
+# Learning curve plot
+# ==========================================================
+def plot_learning_curve(df, out_dir):
     df = df.sort_values("k_shot")
     df["pretty_encoder"] = df["encoder"].apply(prettify)
-
-    output_dir = Path("outputs/benchmark_results")  # UPDATE THIS
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     encoders = sorted(df["encoder"].unique())
     probes = sorted(df["probe"].unique())
 
-    # -------------------------------------------
-    # FIXED GLOBAL COLOR MAP FOR ALL ENCODERS
-    # -------------------------------------------
-    # MUCH nicer than tab20 and consistent
+    # Stable global color map
     palette = sns.color_palette("husl", len(encoders))
     color_map = {enc: palette[i] for i, enc in enumerate(encoders)}
 
     for probe in probes:
-        df_probe = df[df["probe"] == probe].copy()
+        df_probe = df[df["probe"] == probe]
 
         plt.figure(figsize=(15, 8))
 
-        # ----------------------------------------------------
-        # MANUAL PLOTTING → FIXED CONSISTENT COLORS
-        # ----------------------------------------------------
+        # One curve per encoder
         for enc in encoders:
             df_enc = df_probe[df_probe["encoder"] == enc]
             if df_enc.empty:
@@ -96,15 +79,12 @@ def plot_learning_curve():
                 linewidth=2.1,
                 markersize=7,
                 alpha=0.85,
-                color=color_map[enc],      # FIXED COLOR
+                color=color_map[enc],
                 label=prettify(enc),
             )
 
-        # ----------------------------------------------------
-        # BEST CURVE (soft black highlight)
-        # ----------------------------------------------------
-        df_best = df_probe.loc[df_probe.groupby("k_shot")["roc_auc"].idxmax()]
-        df_best = df_best.sort_values("k_shot")
+        # Best per k-shot highlight
+        df_best = df_probe.loc[df_probe.groupby("k_shot")["roc_auc"].idxmax()].sort_values("k_shot")
 
         plt.plot(
             df_best["k_shot"],
@@ -118,9 +98,7 @@ def plot_learning_curve():
             zorder=5
         )
 
-        # ----------------------------------------------------
-        # BEST POINT LABELS
-        # ----------------------------------------------------
+        # Label the maxima
         for _, row in df_best.iterrows():
             plt.annotate(
                 prettify(row["encoder"]),
@@ -134,125 +112,118 @@ def plot_learning_curve():
                 arrowprops=dict(arrowstyle="->", lw=0.8, alpha=0.6),
             )
 
-        # ----------------------------------------------------
-        # PERFECT LOG-SCALE k AXIS
-        # ----------------------------------------------------
         plt.xscale("log")
-        k_values = sorted(df_probe["k_shot"].unique())
-        plt.xticks(k_values, k_values, fontsize=11)
+        k_vals = sorted(df_probe["k_shot"].unique())
+        plt.xticks(k_vals, k_vals, fontsize=11)
 
         plt.xlabel("k-shot", fontsize=14)
         plt.ylabel("ROC-AUC", fontsize=14)
         plt.title(f"Learning Curve for Probe: {probe}", fontsize=20)
+        plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
-        plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", title="Encoder")
+        outfile = out_dir / f"learning_curve_{probe}.png"
         plt.tight_layout()
-
-        outfile = output_dir / f"learning_curve_{probe}.png"
         plt.savefig(outfile, dpi=300)
         plt.close()
-
         print(f"[PNG] Saved → {outfile}")
 
 
-# ==============================================================
-# BEST TABLES (per probe, per k, overall)
-# ==============================================================
-
-def generate_best_table():
-    df = pd.read_csv(BENCHMARK_FILE)
-
+# ==========================================================
+# Tables of best results
+# ==========================================================
+def generate_best_tables(df, out_dir):
     best_per_k = df.loc[df.groupby(["probe", "k_shot"])["roc_auc"].idxmax()]
     best_overall = df.loc[df.groupby("probe")["roc_auc"].idxmax()]
 
-    output_dir = Path("outputs/benchmark_results")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    best_per_k.to_csv(out_dir / "best_per_probe_per_k.csv", index=False)
+    best_overall.to_csv(out_dir / "best_per_probe_overall.csv", index=False)
 
-    best_per_k.to_csv(output_dir / "best_per_probe_per_k.csv", index=False)
-    best_overall.to_csv(output_dir / "best_per_probe_overall.csv", index=False)
-
-    print("[CSV] Saved best_per_probe_per_k.csv")
-    print("[CSV] Saved best_per_probe_overall.csv")
+    print("[CSV] Saved → best_per_probe_per_k.csv")
+    print("[CSV] Saved → best_per_probe_overall.csv")
 
 
-# ==============================================================
-# SEABORN HEATMAP: MODEL × PROBE
-# ==============================================================
-
-def heatmap_models_by_probes():
-    df = pd.read_csv(BENCHMARK_FILE)
-    output_dir = Path("outputs/benchmark_results")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
+# ==========================================================
+# Heatmaps
+# ==========================================================
+def generate_heatmaps(df, out_dir):
     k_values = sorted(df["k_shot"].unique())
-    # for all k-shot values create heatmaps
+
     for k in k_values:
         df_k = df[df["k_shot"] == k]
-        # create pivot table, rows= encoder, columns=probe, values=roc_auc
-        matrix_k = df_k.pivot(index="encoder", columns="probe", values="roc_auc")
-        matrix_k.rename(index=prettify, inplace=True)
+
+        matrix = df_k.pivot(index="encoder", columns="probe", values="roc_auc")
+        matrix.rename(index=prettify, inplace=True)
 
         plt.figure(figsize=(16, 10))
-        #mask = matrix_k < 0.50  # highlight values less than 0.5
         sns.heatmap(
-            matrix_k,
+            matrix,
             annot=True,
             fmt=".2f",
-            cmap=sns.color_palette("Blues", as_cmap=True),  # strong blue gradient
+            cmap=sns.color_palette("Blues", as_cmap=True),
             linewidths=0.5,
             cbar_kws={"label": "ROC-AUC"},
-            vmin=0.50,          # color range lower bound
-            vmax=1.00,          # color range upper bound
-            #mask=mask,          # hide values < .50 (white)
+            vmin=0.50,
+            vmax=1.00,
         )
-       
-        plt.title(f"Model Performance Across Probes (k={k})", fontsize=18)
-        plt.xlabel("Probe")
-        plt.ylabel("Encoder")
+
+        plt.title(f"Model × Probe Heatmap (k={k})", fontsize=18)
         plt.tight_layout()
-        out_k = output_dir / f"model_vs_probe_heatmap_k{k}.png"
+
+        out_k = out_dir / f"heatmap_k{k}.png"
         plt.savefig(out_k, dpi=300)
         plt.close()
-        print(f"[Heatmap] Saved --> {out_k}")
-    
-    # now average over k-shot values
-    df_avg = (
-        df.groupby(["encoder", "probe"])["roc_auc"]
-        .mean()
-        .reset_index()
-    )
+        print(f"[Heatmap] Saved → {out_k}")
 
+    # Mean over k
+    df_avg = df.groupby(["encoder", "probe"])["roc_auc"].mean().reset_index()
     matrix = df_avg.pivot(index="encoder", columns="probe", values="roc_auc")
     matrix.rename(index=prettify, inplace=True)
 
     plt.figure(figsize=(16, 10))
     sns.heatmap(
-            matrix,
-            annot=True,
-            fmt=".2f",
-            cmap=sns.color_palette("Blues", as_cmap=True),  # strong blue gradient
-            linewidths=0.5,
-            cbar_kws={"label": "ROC-AUC"},
-            vmin=0.50,          # color range lower bound
-            vmax=1.00,          # color range upper bound
-            #mask=mask,          # hide values < .50 (white)
-        )
-    plt.title("Model Performance Across Probes (Mean ROC-AUC over k-shot)", fontsize=18)
-    plt.xlabel("Probe")
-    plt.ylabel("Encoder")
+        matrix,
+        annot=True,
+        fmt=".2f",
+        cmap=sns.color_palette("Blues", as_cmap=True),
+        linewidths=0.5,
+        cbar_kws={"label": "Mean ROC-AUC"},
+        vmin=0.50,
+        vmax=1.00,
+    )
+
+    plt.title("Mean ROC-AUC Across k-shot", fontsize=18)
     plt.tight_layout()
-    out = output_dir / "model_vs_probe_heatmap_mean.png"
+
+    out = out_dir / "heatmap_mean.png"
     plt.savefig(out, dpi=300)
     plt.close()
+    print(f"[Heatmap] Saved → {out}")
 
-    print(f"[Heatmap] Saved --> {out}")
 
+def run_all_plots(agg):
+    """
+    Loads the correct benchmark CSV for the chosen aggregation method.
+    Produces:
+    - learning curves
+    - best tables
+    - heatmaps
+    """
 
-# ==============================================================
-# MAIN EXECUTION
-# ==============================================================
+    benchmark_file = Path(f"outputs/{agg}_benchmark_results.csv")
+    if not benchmark_file.exists():
+        print(f"[ERROR] Benchmark file does not exist: {benchmark_file}")
+        return
 
-if __name__ == "__main__":
-    plot_learning_curve()
-    generate_best_table()
-    heatmap_models_by_probes()
+    df = pd.read_csv(benchmark_file)
+
+    out_dir = Path(f"outputs/{agg}_benchmark_results")
+    out_dir.mkdir(exist_ok=True, parents=True)
+
+    print(f"[INFO] Loaded {len(df)} rows from → {benchmark_file}")
+
+    plot_learning_curve(df, out_dir)
+    generate_best_tables(df, out_dir)
+    generate_heatmaps(df, out_dir)
+
+    print(f"[DONE] All plots saved under → {out_dir}")
+

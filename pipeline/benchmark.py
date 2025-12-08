@@ -4,9 +4,8 @@ from pathlib import Path
 import itertools
 import time
 
-# ============================================================
-# USER CONFIG
-# ============================================================
+from plot_benchmarks import run_all_plots
+
 
 BASE_CONFIG = "configs/base_config.yaml"
 
@@ -31,33 +30,28 @@ ENCODERS = [
     "PROV_GIGAPATH_256_TILE",
 ]
 
-PROBES = ["svm_linear"]
+PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf"]
 
 K_VALUES = [100, 80, 40, 20, 5, 1]
 
-AGGREGATION_METHODS = ["mean", "max", "min"]  # add/remove as you want
+AGGREGATION_METHODS = ["mean", "max", "min"]
 
 EPOCHS = 100
 
 
 # ============================================================
-# Helpers
+# Check if experiment already done
 # ============================================================
-
 def experiment_exists(model, probe, k, agg):
-    """
-    Checks whether an experiment has finished already:
-    metrics.json must exist (TRAIN + EVAL done)
-    """
     exp_root = Path(f"outputs/experiments_benchmark/{agg}/{model}/{probe}/k{k}")
     metrics_file = exp_root / "eval" / "metrics" / "metrics.json"
     return metrics_file.exists()
 
 
+# ============================================================
+# Run one experiment
+# ============================================================
 def run_experiment(model, probe, k, agg):
-    """
-    Launch main.py with aggregation override.
-    """
     cmd = [
         sys.executable,
         "main.py",
@@ -65,7 +59,7 @@ def run_experiment(model, probe, k, agg):
         "--model", model,
         "--probe", probe,
         "--k", str(k),
-        "--agg", agg,            # <--- NEW aggregation override
+        "--agg", agg,
         "--epochs", str(EPOCHS),
         "--stage", "all",
     ]
@@ -80,12 +74,11 @@ def run_experiment(model, probe, k, agg):
 
 
 # ============================================================
-# MAIN BENCHMARK LOOP
+# Main benchmark loop
 # ============================================================
-
 def run_benchmark():
     total = len(ENCODERS) * len(PROBES) * len(K_VALUES) * len(AGGREGATION_METHODS)
-    print(f"[BENCHMARK] Total experiments to run: {total}")
+    print(f"[BENCHMARK] Total experiments: {total}")
 
     for model, probe, k, agg in itertools.product(ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS):
 
@@ -101,8 +94,22 @@ def run_benchmark():
             time.sleep(3)
             continue
 
-        print(f"[DONE] MODEL={model} PROBE={probe} k={k} agg={agg}\n")
+        print(f"[DONE] MODEL={model} PROBE={probe} k={k} agg={agg}")
         time.sleep(1)
+
+    # ===================================================
+    # AFTER ALL EXPERIMENTS: Generate plots for each agg
+    # ===================================================
+    print("\n==============================================")
+    print("  GENERATING FINAL BENCHMARK PLOTS FOR EACH AGG")
+    print("==============================================\n")
+
+    for agg in AGGREGATION_METHODS:
+        run_all_plots(agg)
+
+    print("\n==============================================")
+    print("        ALL BENCHMARKING COMPLETE!")
+    print("==============================================\n")
 
 
 if __name__ == "__main__":

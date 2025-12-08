@@ -13,6 +13,7 @@ from data.process_slide_features import process_slide_features
 from utils.feature_cache import ensure_cached_features
 from data.dataset_check import check_subset_consistency
 from log_benchmark import log_benchmark
+from plot_benchmarks import run_all_plots
 
 from probes import build_probe, TorchProbe, default_probe_path
 from metrics import compute_and_log_metrics
@@ -67,6 +68,8 @@ def run_eval(cfg):
 
     log_benchmark(cfg, metrics)
 
+ 
+
     logging.info(f"[Eval] Final metrics → {metrics}")
     logging.info("========== EVAL DONE ==========")
 
@@ -76,6 +79,7 @@ if __name__ == "__main__":
     cfg = load_merged_config(args.config, args=None)
 
     run_eval(cfg)
+   
 
     import torch, gc
     torch.cuda.empty_cache()

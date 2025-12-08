@@ -11,10 +11,14 @@
 #SBATCH --qos=low
 #SBATCH --requeue
 
+pip3 install seaborn
 
 echo "============================"
 echo "   STARTING BENCHMARK RUN   "
 echo "============================"
+
+
+
 
 echo "[INFO] Hostname: $(hostname)"
 echo "[INFO] SLURM Job ID: $SLURM_JOB_ID"
