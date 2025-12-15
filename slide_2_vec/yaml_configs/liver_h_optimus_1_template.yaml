@@ -1,0 +1,45 @@
+csv: "${CSV_FILE}"
+
+output_dir: "${SCRATCH_OUTPUT_DIR}"
+resume: true
+resume_dirname: "${FINAL_OUTPUT_DIR}"
+
+visualize: true
+seed: 0
+
+tiling:
+  read_coordinates_from: "/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1_last6k"
+  spacing: 0.5
+  tile_size: 224
+  backend: "openslide"
+  tissue_pixel_value: 1
+  downsample: 64
+  seg_params:
+    sthresh: 8
+    mthresh: 7
+    close: 12
+    use_otsu: true
+  params:
+    overlap: 0.0
+    drop_holes: false
+    tissue_thresh: 0.01
+    use_padding: true
+    ref_tile_size: 16
+    a_t: 10
+    a_h: 16
+    max_n_holes: 8
+
+model:
+  level: "tile"
+  name: "h-optimus-1"
+  batch_size: 8
+  tile_size: ${tiling.tile_size}
+  patch_size: 224
+
+speed:
+  fp16: false
+  num_workers_tiling: 16
+  num_workers_embedding: 16
+
+wandb:
+  enable: false

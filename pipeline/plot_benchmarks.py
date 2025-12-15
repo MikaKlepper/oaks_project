@@ -46,18 +46,40 @@ mpl.rcParams.update({
 
 
 # ==========================================================
+# Distinct color + marker mapping (BEST visualization)
+# ==========================================================
+def _get_encoder_style_maps(encoders):
+    # Strong perceptual palettes combined
+    colors = (
+        list(plt.get_cmap("tab20").colors) +
+        list(plt.get_cmap("tab20b").colors) +
+        list(plt.get_cmap("tab20c").colors)
+    )
+
+    # Marker shapes: simple, readable, high contrast
+    MARKERS = ["o", "s", "^", "D", "P", "X", "*", "v"]
+
+    color_map = {}
+    marker_map = {}
+
+    for i, enc in enumerate(encoders):
+        color_map[enc] = colors[i % len(colors)]        # Very distinct colors
+        marker_map[enc] = MARKERS[i % len(MARKERS)]     # Easy-to-see shape
+
+    return color_map, marker_map
+
+
+# ==========================================================
 # Learning curve plot
 # ==========================================================
-def plot_learning_curve(df, out_dir):
+def plot_learning_curve(df, out_dir, agg):
     df = df.sort_values("k_shot")
     df["pretty_encoder"] = df["encoder"].apply(prettify)
 
     encoders = sorted(df["encoder"].unique())
     probes = sorted(df["probe"].unique())
 
-    # Stable global color map
-    palette = sns.color_palette("husl", len(encoders))
-    color_map = {enc: palette[i] for i, enc in enumerate(encoders)}
+    color_map, marker_map = _get_encoder_style_maps(encoders)
 
     for probe in probes:
         df_probe = df[df["probe"] == probe]
@@ -75,11 +97,11 @@ def plot_learning_curve(df, out_dir):
             plt.plot(
                 df_enc["k_shot"],
                 df_enc["roc_auc"],
-                marker="o",
-                linewidth=2.1,
-                markersize=7,
-                alpha=0.85,
-                color=color_map[enc],
+                marker=marker_map[enc],   # Distinct marker
+                linewidth=2.8,            # Thicker line for readability
+                markersize=9,
+                alpha=0.9,
+                color=color_map[enc],     # Distinct color
                 label=prettify(enc),
             )
 
@@ -92,8 +114,8 @@ def plot_learning_curve(df, out_dir):
             color="black",
             linewidth=4,
             marker="o",
-            markersize=10,
-            alpha=0.35,
+            markersize=12,
+            alpha=0.3,
             label="Best ROC-AUC",
             zorder=5
         )
@@ -121,7 +143,7 @@ def plot_learning_curve(df, out_dir):
         plt.title(f"Learning Curve for Probe: {probe}", fontsize=20)
         plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
-        outfile = out_dir / f"learning_curve_{probe}.png"
+        outfile = out_dir / f"{agg}_learning_curve_{probe}.png"
         plt.tight_layout()
         plt.savefig(outfile, dpi=300)
         plt.close()
@@ -131,12 +153,12 @@ def plot_learning_curve(df, out_dir):
 # ==========================================================
 # Tables of best results
 # ==========================================================
-def generate_best_tables(df, out_dir):
+def generate_best_tables(df, out_dir, agg):
     best_per_k = df.loc[df.groupby(["probe", "k_shot"])["roc_auc"].idxmax()]
     best_overall = df.loc[df.groupby("probe")["roc_auc"].idxmax()]
 
-    best_per_k.to_csv(out_dir / "best_per_probe_per_k.csv", index=False)
-    best_overall.to_csv(out_dir / "best_per_probe_overall.csv", index=False)
+    best_per_k.to_csv(out_dir / f"{agg}_best_per_probe_per_k.csv", index=False)
+    best_overall.to_csv(out_dir / f"{agg}_best_per_probe_overall.csv", index=False)
 
     print("[CSV] Saved → best_per_probe_per_k.csv")
     print("[CSV] Saved → best_per_probe_overall.csv")
@@ -145,7 +167,7 @@ def generate_best_tables(df, out_dir):
 # ==========================================================
 # Heatmaps
 # ==========================================================
-def generate_heatmaps(df, out_dir):
+def generate_heatmaps(df, out_dir, agg):
     k_values = sorted(df["k_shot"].unique())
 
     for k in k_values:
@@ -169,7 +191,7 @@ def generate_heatmaps(df, out_dir):
         plt.title(f"Model × Probe Heatmap (k={k})", fontsize=18)
         plt.tight_layout()
 
-        out_k = out_dir / f"heatmap_k{k}.png"
+        out_k = out_dir / f"{agg}_heatmap_k{k}.png"
         plt.savefig(out_k, dpi=300)
         plt.close()
         print(f"[Heatmap] Saved → {out_k}")
@@ -194,21 +216,16 @@ def generate_heatmaps(df, out_dir):
     plt.title("Mean ROC-AUC Across k-shot", fontsize=18)
     plt.tight_layout()
 
-    out = out_dir / "heatmap_mean.png"
+    out = out_dir / f"{agg}_heatmap_mean.png"
     plt.savefig(out, dpi=300)
     plt.close()
     print(f"[Heatmap] Saved → {out}")
 
 
+# ==========================================================
+# Master function
+# ==========================================================
 def run_all_plots(agg):
-    """
-    Loads the correct benchmark CSV for the chosen aggregation method.
-    Produces:
-    - learning curves
-    - best tables
-    - heatmaps
-    """
-
     benchmark_file = Path(f"outputs/{agg}_benchmark_results.csv")
     if not benchmark_file.exists():
         print(f"[ERROR] Benchmark file does not exist: {benchmark_file}")
@@ -221,9 +238,8 @@ def run_all_plots(agg):
 
     print(f"[INFO] Loaded {len(df)} rows from → {benchmark_file}")
 
-    plot_learning_curve(df, out_dir)
-    generate_best_tables(df, out_dir)
-    generate_heatmaps(df, out_dir)
+    plot_learning_curve(df, out_dir, agg)
+    generate_best_tables(df, out_dir, agg)
+    generate_heatmaps(df, out_dir, agg)
 
     print(f"[DONE] All plots saved under → {out_dir}")
-

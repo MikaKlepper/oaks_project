@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=40G
+#SBATCH --mem=20G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="benchmark-all-models"
 #SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-benchmark.out

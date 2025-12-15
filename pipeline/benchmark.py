@@ -45,7 +45,10 @@ EPOCHS = 100
 def experiment_exists(model, probe, k, agg):
     exp_root = Path(f"outputs/experiments_benchmark/{agg}/{model}/{probe}/k{k}")
     metrics_file = exp_root / "eval" / "metrics" / "metrics.json"
-    return metrics_file.exists()
+    mis_file = exp_root / "eval" / "metrics" / "misclassified.json"
+    return mis_file.exists()
+
+    # return metrics_file.exists()
 
 
 # ============================================================
@@ -82,9 +85,13 @@ def run_benchmark():
 
     for model, probe, k, agg in itertools.product(ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS):
 
-        if experiment_exists(model, probe, k, agg):
-            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already done.")
+        if probe == "knn" and k == 1:
+            print(f"[SKIP] MODEL={model} PROBE=knn k=1 agg={agg} (insufficient samples for 5-NN).")
             continue
+          
+        # if experiment_exists(model, probe, k, agg):
+        #     print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already done.")
+        #     continue
 
         try:
             run_experiment(model, probe, k, agg)

@@ -1,7 +1,47 @@
 # data/prepare_dataset.py
 
+import ast
 import pandas as pd
 from pathlib import Path
+
+
+# ============================================================
+# Helper: robust hypertrophy parser
+# ============================================================
+
+def _extract_hypertrophy_location_severity(finding_str):
+    """
+    Parse the 'findings' string and return (location, severity) for Hypertrophy.
+
+    Examples of findings strings:
+
+      "[['Hypertrophy', 'Centrilobular', 'slight', False]]"
+      "[['Ground glass appearance', 'Centrilobular', 'minimal', False], "
+      " ['Hypertrophy', 'Centrilobular', 'minimal', False]]"
+
+    If no Hypertrophy entry is found or parsing fails → (None, None).
+    """
+    if not isinstance(finding_str, str):
+        return None, None
+
+    try:
+        findings = ast.literal_eval(finding_str)
+    except Exception:
+        return None, None
+
+    if not isinstance(findings, list):
+        return None, None
+
+    for entry in findings:
+        # Expect list like: ['Hypertrophy', 'Centrilobular', 'slight', False]
+        if isinstance(entry, list) and len(entry) >= 3:
+            lesion = entry[0]
+            if isinstance(lesion, str) and lesion.lower() == "hypertrophy":
+                location = entry[1]
+                severity = entry[2]
+                return location, severity
+
+    return None, None
 
 
 # ============================================================
@@ -12,14 +52,15 @@ def _load_metadata(cfg):
     df = pd.read_csv(cfg.data.metadata_csv)
     df = df[df["ORGAN"].str.lower() == cfg.data.organ.lower()].copy()
 
-    # Hypertrophy label
+    # Hypertrophy label (binary)
     df["HasHypertrophy"] = df["findings"].str.contains("Hypertrophy", na=False).astype(int)
 
-    # Optional fields
-    df[["Location", "Severity"]] = df["findings"].str.extract(
-        r"\['Hypertrophy'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\]"
-    )
+    # Robust extraction of Location & Severity for hypertrophy
+    loc_sev = df["findings"].apply(_extract_hypertrophy_location_severity)
+    df["Location"] = loc_sev.apply(lambda x: x[0])
+    df["Severity"] = loc_sev.apply(lambda x: x[1])
 
+    # Keep Location/Severity only where Hypertrophy is present
     df["Location"] = df["Location"].where(df["HasHypertrophy"] == 1)
     df["Severity"] = df["Severity"].where(df["HasHypertrophy"] == 1)
 
@@ -125,6 +166,8 @@ def prepare_dataset_inputs(cfg):
             "ids": ids,
             "labels": labels,
             "num_classes": len(set(labels)),
+            "severity": df["Severity"].tolist(),
+            "location": df["Location"].tolist(),
 
             # DIRS
             "raw_slide_dir": dirs["raw_slide_dir"],

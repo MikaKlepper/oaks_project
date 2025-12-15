@@ -25,6 +25,9 @@ class ToxicologyDataset(Dataset):
         # -----------------------------------------------
         self.ids    = list(data["ids"])
         self.labels = list(data["labels"])
+        self.severity = list(data.get("severity", [None] * len(self.ids)))
+        self.location = list(data.get("location", [None] * len(self.ids)))
+
 
         if len(self.ids) != len(self.labels):
             raise ValueError("[DATA] IDs and labels mismatch")
