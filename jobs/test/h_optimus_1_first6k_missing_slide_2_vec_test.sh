@@ -8,7 +8,7 @@
 #SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_missing_first6k.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=vram
+#SBATCH --qos=high
 #SBATCH --requeue
 
 echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON first 6k missing part SET"

@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import itertools
 import time
+import pandas as pd
 
 from plot_benchmarks import run_all_plots
 
@@ -31,23 +32,29 @@ ENCODERS = [
 ]
 
 PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf"]
-
 K_VALUES = [100, 80, 40, 20, 5, 1]
-
 AGGREGATION_METHODS = ["mean", "max", "min"]
-
 EPOCHS = 100
 
 
 # ============================================================
-# Check if experiment already done
+# Check if experiment already exists (via benchmark CSV)
 # ============================================================
-def experiment_exists(model, probe, k, agg):
-    exp_root = Path(f"outputs/experiments_benchmark/{agg}/{model}/{probe}/k{k}")
-    metrics_file = exp_root / "eval" / "metrics" / "metrics.json"
-    mis_file = exp_root / "eval" / "metrics" / "misclassified.json"
-    return mis_file.exists()
+def experiment_exists(model, probe, k, agg, stage="eval"):
+    benchmark_file = Path("outputs") / stage / f"{agg}_benchmark_results.csv"
+    if not benchmark_file.exists():
+        return False
 
+    df = pd.read_csv(benchmark_file)
+
+    match = (
+        (df["encoder"] == model) &
+        (df["probe"] == probe) &
+        (df["k_shot"] == k) &
+        (df["aggregation"] == agg)
+    )
+
+    return match.any()
 
 
 
@@ -83,14 +90,16 @@ def run_benchmark():
     total = len(ENCODERS) * len(PROBES) * len(K_VALUES) * len(AGGREGATION_METHODS)
     print(f"[BENCHMARK] Total experiments: {total}")
 
-    for model, probe, k, agg in itertools.product(ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS):
+    for model, probe, k, agg in itertools.product(
+        ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS
+    ):
 
         if probe == "knn" and k == 1:
-            print(f"[SKIP] MODEL={model} PROBE=knn k=1 agg={agg} (insufficient samples for 5-NN).")
+            print(f"[SKIP] MODEL={model} PROBE=knn k=1 agg={agg}")
             continue
-          
-        if experiment_exists(model, probe, k, agg):
-            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already done.")
+
+        if experiment_exists(model, probe, k, agg, stage="eval"):
+            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already benchmarked.")
             continue
 
         try:
@@ -105,14 +114,15 @@ def run_benchmark():
         time.sleep(1)
 
     # ===================================================
-    # AFTER ALL EXPERIMENTS: Generate plots for each agg
+    # Generate plots for eval and test
     # ===================================================
     print("\n==============================================")
-    print("  GENERATING FINAL BENCHMARK PLOTS FOR EACH AGG")
+    print("  GENERATING BENCHMARK PLOTS")
     print("==============================================\n")
 
     for agg in AGGREGATION_METHODS:
-        run_all_plots(agg)
+        run_all_plots(agg, stage="eval")
+        run_all_plots(agg, stage="test")
 
     print("\n==============================================")
     print("        ALL BENCHMARKING COMPLETE!")

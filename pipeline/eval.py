@@ -1,17 +1,17 @@
 # pipeline/eval.py
+
 import gc
 import logging
 from pathlib import Path
+
 import numpy as np
 import torch
-import json
-import matplotlib.pyplot as plt
 
 from argparser import get_args
 from utils.config_loader import load_merged_config
+from utils.feature_cache import ensure_cached_features
 from data.prepare_dataset import prepare_dataset_inputs
 from data.create_datasets import ToxicologyDataset
-from utils.feature_cache import ensure_cached_features
 from data.dataset_check import check_subset_consistency
 
 from probes import build_probe, TorchProbe, default_probe_path
@@ -21,13 +21,24 @@ from log_benchmark import log_benchmark
 
 from eval_analysis import run_misclassification_analysis
 
+
 def run_eval(cfg):
+    """
+    Run evaluation on the dataset split specified by cfg.datasets.split.
+    This function is used for both validation (stage=eval) and test (stage=test).
+    """
     exp_root = Path(cfg.experiment_root)
+    stage = cfg.stage  # "eval" or "test"
+    stage_dir = exp_root / stage
+
     setup_logger(exp_root)
 
-    logging.info("========== EVAL ==========")
+    logging.info(f"========== {stage.upper()} ==========")
+    logging.info(f"[Eval] Dataset split: {cfg.datasets.split}")
 
-    # ---------------- Data ----------------
+    # -------------------------------------------------
+    # Data
+    # -------------------------------------------------
     prepared = prepare_dataset_inputs(cfg)
     ensure_cached_features(prepared)
     check_subset_consistency(prepared)
@@ -35,7 +46,9 @@ def run_eval(cfg):
     dataset = ToxicologyDataset(prepared)
     data = prepared["data"]
 
-    # ---------------- Model ----------------
+    # -------------------------------------------------
+    # Model
+    # -------------------------------------------------
     probe = build_probe(
         prepared,
         input_dim=data["embed_dim"],
@@ -48,43 +61,55 @@ def run_eval(cfg):
     logging.info(f"[Eval] Loading checkpoint → {ckpt_path}")
     probe.load(ckpt_path)
 
-    # ---------------- Predictions ----------------
+    # -------------------------------------------------
+    # Predictions
+    # -------------------------------------------------
     logging.info("[Eval] Running predictions…")
     y_pred = probe.predict(dataset)
     y_true = np.asarray(dataset.labels)
 
-    # ---------------- Analysis ----------------
+    # -------------------------------------------------
+    # Misclassification analysis
+    # -------------------------------------------------
     run_misclassification_analysis(
         dataset=dataset,
         y_true=y_true,
         y_pred=y_pred,
         exp_root=exp_root,
+        stage=stage,
     )
 
-    # ---------------- Probabilities ----------------
+    # -------------------------------------------------
+    # Probabilities (optional)
+    # -------------------------------------------------
     try:
         y_proba = probe.predict_proba(dataset)
     except Exception:
         y_proba = None
 
-    # ---------------- Metrics ----------------
+    # -------------------------------------------------
+    # Metrics
+    # -------------------------------------------------
     metrics = compute_and_log_metrics(
         y_true=y_true,
         y_pred=y_pred,
         y_proba=y_proba,
-        exp_root=exp_root / "eval",
+        exp_root=stage_dir,
         class_names=["No Hypertrophy", "Hypertrophy"],
     )
 
     log_benchmark(cfg, metrics)
 
-    logging.info(f"[Eval] Final metrics → {metrics}")
-    logging.info("========== EVAL DONE ==========")
+    logging.info(f"[{stage.upper()}] Final metrics → {metrics}")
+    logging.info(f"========== {stage.upper()} DONE ==========")
 
 
 if __name__ == "__main__":
     args = get_args()
-    cfg = load_merged_config(args.config, args=None)
+
+    # IMPORTANT:
+    # args.stage is already set by main.py subprocess call
+    cfg = load_merged_config(args.config, args)
 
     run_eval(cfg)
 

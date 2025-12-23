@@ -44,6 +44,8 @@ def get_args():
     parser.add_argument("--eval_subset_csv", type=str, default=None,
         help="Subset CSV to use only during evaluation")
 
+    parser.add_argument("--test_subset_csv", type=str, default=None,
+        help="Subset CSV to use only during testing")
 
     # Training hyperparameters
     parser.add_argument("--optimizer", type=str)

@@ -10,6 +10,13 @@ from .dir_builder import build_feature_dirs
 # ==========================================================================
 
 def incorporate_cli_args(cfg, args):
+    """
+    Apply command-line overrides to the base config.
+    Stage semantics:
+      - train → training split
+      - eval  → validation split
+      - test  → test split
+    """
     if args is None:
         return cfg, []
 
@@ -59,51 +66,70 @@ def incorporate_cli_args(cfg, args):
     # RUNTIME
     # ----------------------------------------------------
     cli.setdefault("runtime", OmegaConf.create())
-    for name in ["optimizer", "loss", "device",
-                 "lr", "batch_size", "epochs",
-                 "momentum", "weight_decay",
-                 "num_workers"]:
-
+    for name in [
+        "optimizer", "loss", "device",
+        "lr", "batch_size", "epochs",
+        "momentum", "weight_decay",
+        "num_workers",
+    ]:
         val = getattr(args, name, None)
         if val is not None:
             cli.runtime[name] = val
 
     # ----------------------------------------------------
-    # DATASET STAGE (train/eval/test)
+    # DATASET SELECTION (by stage)
     # ----------------------------------------------------
+    cli.datasets = OmegaConf.create()
+
+    # ---------------- TRAIN ----------------
     if args.stage == "train":
-        cli.datasets = OmegaConf.create()
         cli.datasets.split = "train"
 
+        # Explicit subset CSV overrides everything
         if args.train_subset_csv:
             cli.datasets.use_subset = True
             cli.datasets.subset_csv = args.train_subset_csv
+
+        # Few-shot fallback
+        elif args.k is not None:
+            cli.datasets.use_subset = True
+            cli.datasets.subset_csv = (
+                f"{cfg.data.data_root}/FewShotCompoundBalanced/"
+                f"train_fewshot_k{args.k}.csv"
+            )
         else:
             cli.datasets.use_subset = False
 
-        if args.k is not None and not args.train_subset_csv:
+    # ---------------- EVAL (validation) ----------------
+    elif args.stage == "eval":
+        cli.datasets.split = "val"
+
+        # Optional validation subset
+        if args.eval_subset_csv:
+            cli.datasets.use_subset = True
+            cli.datasets.subset_csv = args.eval_subset_csv
+        else:
             cli.datasets.use_subset = True
             cli.datasets.subset_csv = (
-                f"{cfg.data.data_root}/FewShotCompoundBalanced/train_fewshot_k{args.k}.csv"
+                f"{cfg.data.data_root}/Subsets/val_balanced_subset.csv"
             )
 
-    elif args.stage == "eval":
-        cli.datasets = OmegaConf.create()
-        cli.datasets.split = "val"
-        cli.datasets.use_subset = True
-        cli.datasets.subset_csv = (
-            args.eval_subset_csv
-            or f"{cfg.data.data_root}/Subsets/val_balanced_subset.csv"
-        )
-
+    # ---------------- TEST ----------------
     elif args.stage == "test":
-        cli.datasets = OmegaConf.create()
         cli.datasets.split = "test"
-        cli.datasets.use_subset = False
+
+        # Optional test subset (explicit only)
+        if getattr(args, "test_subset_csv", None):
+            cli.datasets.use_subset = True
+            cli.datasets.subset_csv = args.test_subset_csv
+        else:
+            cli.datasets.use_subset = True
+            cli.datasets.subset_csv = (
+                f"{cfg.data.data_root}/Splits/test.csv"
+            )
 
     merged = OmegaConf.merge(cfg, cli)
     return merged, entries
-
 
 
 # ==========================================================================
@@ -111,35 +137,40 @@ def incorporate_cli_args(cfg, args):
 # ==========================================================================
 
 def load_merged_config(config_path, args=None):
-
+    """
+    Load base YAML config, apply CLI overrides,
+    resolve feature directories, and finalize model settings.
+    """
     config_path = Path(config_path)
     base_cfg = OmegaConf.load(config_path)
 
-    # 1) Apply CLI args (only when called from main)
+    # 1) Apply CLI overrides
     cfg, _ = incorporate_cli_args(base_cfg, args)
 
-    # 2) Build dirs for raw/slide/animal (global caching)
+    # 2) Build directories for raw and cached features
     dirs = build_feature_dirs(
         features_root=cfg.features.features_root,
         encoder=cfg.features.encoder,
-        cache_root=cfg.features.cache_root,   # NEW GLOBAL CACHE LOCATION
+        cache_root=cfg.features.cache_root,
         split=cfg.datasets.split,
-        aggregation=cfg.aggregation.type
+        aggregation=cfg.aggregation.type,
     )
 
-    # Assign dirs to cfg.data — NOT cfg.features
+    # Assign dirs to cfg.data
     cfg.data.raw_slide_dir = str(dirs["raw_slide_dir"])
     cfg.data.slide_dir     = str(dirs["slide_dir"])
     cfg.data.animal_dir    = str(dirs["animal_dir"])
 
-    # 3) Apply encoder dim from global yaml
+    # 3) Apply encoder embedding dimension
     pipeline_root = Path(__file__).resolve().parents[1]
     enc_file = pipeline_root / "configs" / "models" / "encoder_dims.yaml"
     enc_cfg = OmegaConf.load(enc_file)
     cfg.features.embed_dim = enc_cfg.encoder_dims[cfg.features.encoder]
 
-    # 4) Probe override YAML
-    probe_yaml = pipeline_root / "configs" / "probes" / f"{cfg.probe.type}.yaml"
+    # 4) Probe-specific override YAML (if exists)
+    probe_yaml = (
+        pipeline_root / "configs" / "probes" / f"{cfg.probe.type}.yaml"
+    )
     if probe_yaml.exists():
         cfg = OmegaConf.merge(cfg, OmegaConf.load(probe_yaml))
 

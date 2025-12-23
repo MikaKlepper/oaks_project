@@ -93,7 +93,7 @@ def _filter_by_split(df, split_csv, cfg):
         return df
 
     split_df = pd.read_csv(split_csv)
-    ftype = cfg.features.feature_type  # FIXED
+    ftype = cfg.features.feature_type  
 
     if ftype == "animal":
         ids = split_df["subject_organ_UID"].astype(str).tolist()

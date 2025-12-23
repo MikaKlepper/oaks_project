@@ -23,12 +23,12 @@ def count_distribution(values):
     return {str(k): int(v) for k, v in zip(u, c)}
 
 
-def run_misclassification_analysis(dataset, y_true, y_pred, exp_root):
+def run_misclassification_analysis(dataset, y_true, y_pred, exp_root, stage):
     logging.info("[Eval] Running misclassification analysis")
 
     wrong_idx = np.where(y_pred != y_true)[0]
 
-    metrics_dir = exp_root / "eval" / "metrics"
+    metrics_dir = exp_root / stage/ "metrics"
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     wrong_ids = [dataset.ids[i] for i in wrong_idx]

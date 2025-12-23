@@ -31,10 +31,24 @@ def run_subprocess(script: str, cfg_path: Path):
     subprocess.run(cmd, check=True)
 
 
+def run_stage(stage: str, args, exp_root: Path):
+    """
+    Run a single pipeline stage (train / eval / test) in isolation.
+    """
+    stage_args = SimpleNamespace(**vars(args))
+    stage_args.stage = stage
+
+    cfg = load_merged_config(args.config, stage_args)
+    cfg_path = write_config(cfg, exp_root / stage)
+
+    script = "train.py" if stage == "train" else "eval.py"
+    run_subprocess(script, cfg_path)
+
+
 def main():
     args = get_args()
 
-    # 1) Load merged config ONCE with CLI args just to get experiment_root
+    # Load once to determine experiment root
     cfg_for_root = load_merged_config(args.config, args)
     exp_root = Path(cfg_for_root.experiment_root)
 
@@ -44,44 +58,25 @@ def main():
 
     # ---------------- TRAIN ONLY ----------------
     if args.stage == "train":
-        args_train = SimpleNamespace(**vars(args))
-        args_train.stage = "train"
-
-        # This call builds dirs for SPLIT=train and applies CLI overrides
-        cfg_train = load_merged_config(args.config, args_train)
-        train_cfg_path = write_config(cfg_train, exp_root / "train")
-        run_subprocess("train.py", train_cfg_path)
+        run_stage("train", args, exp_root)
         return
 
-    # ---------------- EVAL ONLY ----------------
+    # ---------------- EVAL ONLY (validation) ----------------
     if args.stage == "eval":
-        args_eval = SimpleNamespace(**vars(args))
-        args_eval.stage = "eval"
-
-        # This call builds dirs for SPLIT=val and applies CLI overrides
-        cfg_eval = load_merged_config(args.config, args_eval)
-        eval_cfg_path = write_config(cfg_eval, exp_root / "eval")
-        run_subprocess("eval.py", eval_cfg_path)
+        run_stage("eval", args, exp_root)
         return
 
-    # ---------------- TRAIN → EVAL ----------------
+    # ---------------- TEST ONLY ----------------
+    if args.stage == "test":
+        run_stage("test", args, exp_root)
+        return
+
+    # ---------------- TRAIN → EVAL → TEST ----------------
     if args.stage == "all":
-        logging.info("[Main] Running TRAIN → EVAL (fully isolated)")
-
-        # TRAIN CONFIG (split=train)
-        args_train = SimpleNamespace(**vars(args))
-        args_train.stage = "train"
-        cfg_train = load_merged_config(args.config, args_train)
-        train_cfg_path = write_config(cfg_train, exp_root / "train")
-        run_subprocess("train.py", train_cfg_path)
-
-        # EVAL CONFIG (split=val)
-        args_eval = SimpleNamespace(**vars(args))
-        args_eval.stage = "eval"
-        cfg_eval = load_merged_config(args.config, args_eval)
-        eval_cfg_path = write_config(cfg_eval, exp_root / "eval")
-        run_subprocess("eval.py", eval_cfg_path)
-
+        logging.info("[Main] Running TRAIN → EVAL → TEST (fully isolated)")
+        run_stage("train", args, exp_root)
+        run_stage("eval", args, exp_root)
+        run_stage("test", args, exp_root)
         return
 
     # ---------------- UNKNOWN STAGE ----------------
