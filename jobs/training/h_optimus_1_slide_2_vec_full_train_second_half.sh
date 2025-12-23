@@ -1,30 +1,31 @@
 #!/bin/bash
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-task=4
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=40G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=30G
 #SBATCH --time=7-00:00:00
-#SBATCH --job-name="l-h_optimus_1"
-#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1.out
+#SBATCH --job-name="l-h_optimus_1-second-half"
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_full_train_second_half.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=vram
+#SBATCH --qos=low
 #SBATCH --requeue
 
-echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON TEST SET"
+
+echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON FULL TRAINING SET (second half)"
 
 # --------------------------------------------------
 # Paths
 # --------------------------------------------------
 REPO_DIR="/data/temporary/mika/repos/oaks_project/slide_2_vec"
-CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1.yaml"
+CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1_train_second_half.yaml"
 
 # WSIs are NOT copied — they are read from test_wsi.csv
 # located under: /data/temporary/mika/repos/oaks_project/wsis/liver/test/test_wsi.csv
 
-SCRATCH_BASE="/scratch_mikaklepper_test"
-SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1"
-FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1"
+SCRATCH_BASE="/scratch_mikaklepper_train"
+SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1_full_second_half"
+FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/liver/Trainings_FM/H_OPTIMUS_1_full_second_half"
 
 echo "Creating necessary directories..."
 mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
@@ -85,3 +86,4 @@ mkdir -p "$FINAL_OUTPUT_DIR"
 cp -ur "$SCRATCH_OUTPUT_DIR"/* "$FINAL_OUTPUT_DIR"/ 2>/dev/null
 
 echo "Slide2Vec H-OPTIMUS-1 job completed successfully."
+

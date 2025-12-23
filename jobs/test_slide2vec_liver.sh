@@ -6,8 +6,8 @@
 #SBATCH --mem=30G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="l-TEST"
-#SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-TEST.out
-#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
+#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-TEST.out
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
 #SBATCH --requeue
 

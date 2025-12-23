@@ -48,7 +48,7 @@ def experiment_exists(model, probe, k, agg):
     mis_file = exp_root / "eval" / "metrics" / "misclassified.json"
     return mis_file.exists()
 
-    # return metrics_file.exists()
+
 
 
 # ============================================================
@@ -89,9 +89,9 @@ def run_benchmark():
             print(f"[SKIP] MODEL={model} PROBE=knn k=1 agg={agg} (insufficient samples for 5-NN).")
             continue
           
-        # if experiment_exists(model, probe, k, agg):
-        #     print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already done.")
-        #     continue
+        if experiment_exists(model, probe, k, agg):
+            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already done.")
+            continue
 
         try:
             run_experiment(model, probe, k, agg)

@@ -1,20 +1,15 @@
-#csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/test_wsi.csv"
-# output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # output directory
-# resume: true # resume from a previous run
-# resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # directory name to resume from
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/test_wsi_paths_4492_to_end_minus_6k.csv"
+output_dir: "/scratch_mikaklepper_test/outputs/H_OPTIMUS_1_missing_first_6k"
 
-output_dir: "/scratch_mikaklepper_test/outputs/H_OPTIMUS_1"  # temporary scratch output directory
-
-resume: true  # resume from a previous run if outputs already exist
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1" # scratch directory to resume from
+resume: true
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1_missing_first_6k"
 
 visualize: true # save a visualization of slide tiling in a .jpg
 
 seed: 0 # seed for reproducibility
 
 tiling:
-  read_coordinates_from: # path to a directory containing {wsi.stem}.npy files with tiles coordinates & associated metadata (leave empty to compute the coordinates)
+  read_coordinates_from:  # path to a directory containing {wsi.stem}.npy files with tiles coordinates & associated metadata (leave empty to compute the coordinates)
   spacing: 0.5 # may be 0.49 spacing at which to tile the slide, in microns per pixel
   tile_size: 224 # size of the tiles to extract, in pixels
   backend: "openslide" # backend to use for slide reading

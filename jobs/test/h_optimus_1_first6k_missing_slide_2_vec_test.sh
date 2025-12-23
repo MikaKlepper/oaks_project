@@ -4,21 +4,21 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=40G
 #SBATCH --time=7-00:00:00
-#SBATCH --job-name="l-h_optimus_1_last6k_batch_0-2k"
-#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_last6k_batch_0-2k.out
+#SBATCH --job-name="l-h_optimus_1_missing_first_6k"
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_missing_first6k.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=low
+#SBATCH --qos=vram
 #SBATCH --requeue
 
-echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON LAST 6K (BATCH 0-2K) SET"
+echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON first 6k missing part SET"
 
 REPO_DIR="/data/temporary/mika/repos/oaks_project/slide_2_vec"
-CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1_last6k_batch_0-2k.yaml"
+CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1_missing_first_6k.yaml"
 
 SCRATCH_BASE="/scratch_mikaklepper_test"
-SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1_last6k/batch_0-2k"
-FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1_last6k/batch_0-2k"
+SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1_missing_first_6k"
+FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1_missing_first_6k"
 
 mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
 

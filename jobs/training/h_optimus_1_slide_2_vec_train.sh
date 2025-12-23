@@ -5,13 +5,13 @@
 #SBATCH --mem=30G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="l-h_optimus_1"
-#SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1.out
-#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1.out
+#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
 #SBATCH --qos=low
 #SBATCH --requeue
 
-echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON TRAINING SET"
+echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON (FULL)TRAINING SET"
 
 # paths
 REPO_DIR="/data/temporary/mika/repos/oaks_project/slide_2_vec"

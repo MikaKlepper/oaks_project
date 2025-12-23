@@ -5,8 +5,8 @@
 #SBATCH --mem=40G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="l-h_optimus_1_last6k_batch_4-6k"
-#SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_last6k_batch_4-6k.out
-#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_last6k_batch_4-6k.out
+#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
 #SBATCH --qos=low
 #SBATCH --requeue
