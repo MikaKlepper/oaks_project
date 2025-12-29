@@ -1,13 +1,13 @@
 #csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
-csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/test_wsi.csv"
+csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/test_wsi_test.csv"
 # output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # output directory
 # resume: true # resume from a previous run
 # resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # directory name to resume from
 
-output_dir: "/scratch_mikaklepper_test/outputs/H_OPTIMUS_1"  # temporary scratch output directory
+output_dir: "/scratch_mikaklepper_test/outputs/H_OPTIMUS_1_"  # temporary scratch output directory
 
 resume: true  # resume from a previous run if outputs already exist
-resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1" # scratch directory to resume from
+resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1_" # scratch directory to resume from
 
 visualize: true # save a visualization of slide tiling in a .jpg
 
@@ -40,7 +40,7 @@ model:
   name: "h-optimus-1" # foundation model name ["uni", "virchow", "virchow2", "prov-gigapath", "h-optimus-0", "titan", "prism"] (leave empty when using a custom model)
   arch: # architecture of custom model
   pretrained_weights: # path to the pretrained weights when using a custom model
-  batch_size: 32
+  batch_size: 8
   tile_size: ${tiling.tile_size}
   patch_size: 224 # if level is "region", size used to unroll the region into patches
 

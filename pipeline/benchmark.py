@@ -10,30 +10,32 @@ from plot_benchmarks import run_all_plots
 
 BASE_CONFIG = "configs/base_config.yaml"
 
-ENCODERS = [
-    "CONCH",
-    "H_OPTIMUS_0",
-    "H_OPTIMUS_1",
-    "UNI",
-    "UNI_2",
-    "VIRCHOW2",
-    "KAIKO",
-    "PHIKON",
-    "PHIKON_V2",
-    "MIDNIGHT12K",
-    "PRISM",
-    "RESNET50",
-    "HIBOU_B",
-    "HIBOU_L",
-    "PROV_GIGAPATH_224_SLIDE",
-    "PROV_GIGAPATH_256_SLIDE",
-    "PROV_GIGAPATH_224_TILE",
-    "PROV_GIGAPATH_256_TILE",
-]
+# ENCODERS = [
+#     "CONCH",
+#     "H_OPTIMUS_0",
+#     "H_OPTIMUS_1",
+#     "UNI",
+#     "UNI_2",
+#     "VIRCHOW2",
+#     "KAIKO",
+#     "PHIKON",
+#     "PHIKON_V2",
+#     "MIDNIGHT12K",
+#     "PRISM",
+#     "RESNET50",
+#     "HIBOU_B",
+#     "HIBOU_L",
+#     "PROV_GIGAPATH_224_SLIDE",
+#     "PROV_GIGAPATH_256_SLIDE",
+#     "PROV_GIGAPATH_224_TILE",
+#     "PROV_GIGAPATH_256_TILE",
+# ]
+ENCODERS =["H_OPTIMUS_1"]  # TEMPORARY LIMIT FOR TESTING
 
 PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf"]
 K_VALUES = [100, 80, 40, 20, 5, 1]
-AGGREGATION_METHODS = ["mean", "max", "min"]
+# AGGREGATION_METHODS = ["mean", "max", "min"]
+AGGREGATION_METHODS = ["mean"]  # TEMPORARY LIMIT FOR TESTING
 EPOCHS = 100
 
 
@@ -50,12 +52,10 @@ def experiment_exists(model, probe, k, agg, stage="eval"):
     match = (
         (df["encoder"] == model) &
         (df["probe"] == probe) &
-        (df["k_shot"] == k) &
-        (df["aggregation"] == agg)
+        (df["k_shot"] == k)
     )
 
     return match.any()
-
 
 
 # ============================================================
@@ -84,22 +84,23 @@ def run_experiment(model, probe, k, agg):
 
 
 # ============================================================
-# Main benchmark loop
+# Main benchmark loop (with progress counter)
 # ============================================================
 def run_benchmark():
-    total = len(ENCODERS) * len(PROBES) * len(K_VALUES) * len(AGGREGATION_METHODS)
-    print(f"[BENCHMARK] Total experiments: {total}")
+    combos = list(itertools.product(ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS))
+    total = len(combos)
 
-    for model, probe, k, agg in itertools.product(
-        ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS
-    ):
+    print(f"[BENCHMARK] Total experiments (theoretical): {total}")
+
+    for idx, (model, probe, k, agg) in enumerate(combos, start=1):
+        print(f"\n[PROGRESS] {idx}/{total} → MODEL={model} PROBE={probe} k={k} agg={agg}")
 
         if probe == "knn" and k == 1:
-            print(f"[SKIP] MODEL={model} PROBE=knn k=1 agg={agg}")
+            print(f"[SKIP] knn cannot use k=1")
             continue
 
         if experiment_exists(model, probe, k, agg, stage="eval"):
-            print(f"[SKIP] MODEL={model} PROBE={probe} k={k} agg={agg} already benchmarked.")
+            print(f"[SKIP] Already benchmarked.")
             continue
 
         try:

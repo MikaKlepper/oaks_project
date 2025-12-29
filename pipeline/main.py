@@ -39,6 +39,7 @@ def run_stage(stage: str, args, exp_root: Path):
     stage_args.stage = stage
 
     cfg = load_merged_config(args.config, stage_args)
+    cfg.stage = stage
     cfg_path = write_config(cfg, exp_root / stage)
 
     script = "train.py" if stage == "train" else "eval.py"

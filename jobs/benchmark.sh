@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=20G
+#SBATCH --gpus-per-task=4
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=30G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="benchmark-all-models"
-#SBATCH --output=/data/temporary/mika/repos/oaks_project/logs/slurm-%j-l-benchmark.out
-#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/temporary:/data/temporary
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_benchmark.out
+#SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=low
+#SBATCH --qos=high
 #SBATCH --requeue
 
 pip3 install seaborn

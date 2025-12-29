@@ -39,7 +39,7 @@ features:
   # val_slide_dir:     "${features.features_root}/Validations_FM/${features.encoder}/features"
   # test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
   # test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/features"
-  use_cache: true
+  use_cache: false
   d_type: "float32"  # choices ["float32", "float16", "bfloat16"]
   embed_dim: null
 

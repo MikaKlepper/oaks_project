@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=40G
 #SBATCH --time=7-00:00:00
@@ -23,8 +23,8 @@ CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1.yaml"
 # located under: /data/temporary/mika/repos/oaks_project/wsis/liver/test/test_wsi.csv
 
 SCRATCH_BASE="/scratch_mikaklepper_test"
-SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1"
-FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1"
+SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1_"
+FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/liver/Tests_FM/H_OPTIMUS_1_"
 
 echo "Creating necessary directories..."
 mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"

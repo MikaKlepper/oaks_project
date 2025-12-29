@@ -8,9 +8,9 @@
 #SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_full_train.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=low
+#SBATCH --qos=high
 #SBATCH --requeue
-#SBATCH --exclude=dlc-mewtwo
+
 
 
 echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON FULL TRAINING SET"
