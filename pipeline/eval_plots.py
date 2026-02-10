@@ -5,6 +5,20 @@ import numpy as np
 
 
 def plot_severity_histogram(severity, out_dir):
+    """
+    Plot a histogram of the distribution of severity labels in a list of severity strings.
+
+    Parameters
+    ----------
+    severity : list
+        A list of severity strings.
+    out_dir : Path
+        The directory to save the plot.
+
+    Returns
+    -------
+    None
+    """
     severity_order = ["minimal", "slight", "moderate", "severe"]
     clean = [s for s in severity if s in severity_order]
 
@@ -26,6 +40,20 @@ def plot_severity_histogram(severity, out_dir):
 
 
 def plot_location_histogram(location, out_dir):
+    """
+    Plot a histogram of the distribution of location labels in a list of location strings.
+
+    Parameters
+    ----------
+    location : list
+        A list of location strings.
+    out_dir : Path
+        The directory to save the plot.
+
+    Returns
+    -------
+    None
+    """
     clean = [l for l in location if l is not None]
     if not clean:
         return

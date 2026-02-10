@@ -2,155 +2,191 @@ import pandas as pd
 from pathlib import Path
 
 
-# =========================
-# NORMALIZATION
-# =========================
 def norm(x):
-    """Normalize ID for consistent matching."""
-    s = str(x).strip()
-    s = s.lstrip("0")
-    return s if s != "" else "0"
+    """
+    Normalize a string by stripping whitespace and removing leading zeros.
+
+    Parameters
+    ----------
+    x : str
+        The string to normalize.
+
+    Returns
+    -------
+    str
+        The normalized string, or "0" if the string is empty after normalization.
+    """
+    s = str(x).strip().lstrip("0")
+    return s or "0"
 
 
-# =========================
-# LOADERS
-# =========================
 def load_ids(csv_path):
-    """Load normalized IDs from CSV (supports slide or animal mode)."""
-    if csv_path is None:
+    """
+    Load a set of slide IDs from a CSV file.
+
+    Parameters
+    ----------
+    csv_path : str or Path
+        The path to the CSV file containing the slide IDs.
+
+    Returns
+    -------
+    set of str
+        A set of normalized slide IDs read from the CSV file.
+    """
+    if not csv_path:
         return set()
 
     csv_path = Path(csv_path)
     if not csv_path.exists():
-        print(f"[WARN] CSV not found: {csv_path}")
+        print(f"[WARN] Missing CSV: {csv_path}")
         return set()
 
     df = pd.read_csv(csv_path)
-    if "slide_id" in df.columns:
-        col = "slide_id"
-    else:
-        col = "subject_organ_UID"
-
+    col = "slide_id" if "slide_id" in df.columns else "subject_organ_UID"
     return {norm(x) for x in df[col].astype(str)}
 
 
-def load_feature_ids(feature_dir: Path):
-    """Return all normalized .pt feature IDs in the directory."""
-    if not feature_dir.exists():
-        print(f"[ERROR] Feature directory missing: {feature_dir}")
-        return set()
+def feature_ids(feature_dir):
+    """
+    Returns a set of normalized slide IDs found in the feature directory.
 
+    Parameters
+    ----------
+    feature_dir : str or Path
+        The path to the feature directory.
+
+    Returns
+    -------
+    set of str
+        A set of normalized slide IDs found in the feature directory.
+    """
+    feature_dir = Path(feature_dir)
+    if not feature_dir.exists():
+        print(f"[ERROR] Missing feature dir: {feature_dir}")
+        return set()
     return {norm(p.stem) for p in feature_dir.glob("*.pt")}
 
 
-# =========================
-# CONSISTENCY CHECK
-# =========================
 def check_subset_consistency(prepared):
+    """
+    Checks the consistency of a subset of IDs against the full dataset.
 
-    print("\n========== CHECKING SUBSET CONSISTENCY ==========")
+    This function checks three things:
+    1. Metadata consistency: checks if the subset IDs are present in the metadata.
+    2. Feature files present: checks if feature files are present for all subset IDs.
+    3. Subset / split leakage: checks if the subset IDs are present in any other split (train, val, test).
+
+    Parameters
+    ----------
+    prepared : dict
+        A dictionary containing the following information:
+            - data : dict
+                Contains the following information:
+                    - df : pandas.DataFrame
+                        The metadata of the dataset
+                    - features_type : str
+                        The type of feature (slide or animal)
+                    - split : str
+                        The split to check (train, val, test)
+                    - features_dir : str or Path
+                        The directory containing the feature files
+                    - ids : set of str
+                        The subset of IDs to check
+                    - subset_csv : str or Path or None
+                        The path to the subset CSV file (optional)
+                    - train_csv : str or Path or None
+                        The path to the train CSV file (optional)
+                    - val_csv : str or Path or None
+                        The path to the validation CSV file (optional)
+                    - test_csv : str or Path or None
+                        The path to the test CSV file (optional)
+
+    Returns
+    -------
+    None
+    """
+    print("\n========== CONSISTENCY CHECK ==========")
 
     data = prepared["data"]
+    df = data["df"].copy()
 
-    df        = data["df"].copy()
-    ftype     = data["features_type"]
-    split     = data["split"]
-
-    # Normalize metadata
-    if "slide_id" in df.columns:
-        df["slide_id"] = df["slide_id"].apply(norm)
-    if "subject_organ_UID" in df.columns:
-        df["subject_organ_UID"] = df["subject_organ_UID"].apply(norm)
-
-    ids        = {norm(x) for x in data["ids"]}
-
-    # Directories for processed features
-    slide_feat_dir  = Path(data["slide_dir"])     # processed slide features
-    animal_feat_dir = Path(data["animal_dir"])    # processed animal features
-    features_dir     = Path(data["features_dir"])  # the one actually used by dataset
-
-    subset_csv = data.get("subset_csv", None)
-    train_csv  = data.get("train_csv", None)
-    val_csv    = data.get("val_csv", None)
-    test_csv   = data.get("test_csv", None)
-
-    print(f"[INFO] Split: {split}")
-    print(f"[INFO] Feature type: {ftype}")
-    print(f"[INFO] Num loaded IDs: {len(ids)}")
-
-    # ------------------------------
-    # 1) Metadata consistency
-    # ------------------------------
-    print("\n--- Checking metadata dataframe ---")
-
+    ftype = data["features_type"]
+    split = data["split"]
     meta_col = "slide_id" if ftype == "slide" else "subject_organ_UID"
-    df_ids = set(df[meta_col])
 
-    missing_meta = ids - df_ids
-    if missing_meta:
-        print(f"[ERROR] {len(missing_meta)} IDs missing from metadata df!")
-        print(list(missing_meta)[:10])
+    # Normalize metadata IDs
+    df[meta_col] = df[meta_col].astype(str).apply(norm)
+
+    dataset_ids = {norm(x) for x in data["ids"]}
+
+    print(f"[INFO] Feature type: {ftype}")
+    print(f"[INFO] Split: {split}")
+    print(f"[INFO] Dataset size: {len(dataset_ids)}")
+
+    # set of metadata IDs for this feature type (slide vs animal)
+    meta_ids = set(df[meta_col])
+    missing = dataset_ids - meta_ids
+
+    if missing:
+        print(f"[ERROR] {len(missing)} IDs missing from metadata")
+        print(list(missing)[:10])
     else:
-        print("[OK] All dataset IDs found in metadata.")
+        print("[OK] Metadata consistency check passed")
 
-    # ------------------------------
-    # 2) Check processed feature files
-    # ------------------------------
-    print("\n--- Checking processed feature files ---")
+    # check if feature files are present
+    feats = feature_ids(data["features_dir"])
+    missing = dataset_ids - feats
 
-    processed_ids = load_feature_ids(features_dir)
-    print(f"[INFO] Found {len(processed_ids)} processed feature vectors in {features_dir}")
+    print(f"[INFO] Found {len(feats)} feature vectors")
 
-    missing_feat = ids - processed_ids
-    if missing_feat:
-        print(f"[ERROR] Missing {len(missing_feat)} processed features!")
-        print(list(missing_feat)[:10])
+    if missing:
+        print(f"[ERROR] {len(missing)} missing feature files")
+        print(list(missing)[:10])
     else:
-        print("[OK] All processed features present.")
+        print("[OK] Feature files check passed")
 
-    # ------------------------------
-    # 3) Subset leakage check
-    # ------------------------------
-    if subset_csv is not None:
-        print("\n--- Checking subset + split leakage ---")
+    # check if subset IDs are present in any other split
+    subset_csv = data.get("subset_csv")
+    if not subset_csv:
+        print("\n[INFO] No subset CSV → skipping leakage check")
+        print("\n========== CHECK COMPLETE ==========\n")
+        return
 
-        subset_ids = load_ids(subset_csv)
+    subset_ids = load_ids(subset_csv)
+    train_ids  = load_ids(data.get("train_csv"))
+    val_ids    = load_ids(data.get("val_csv"))
+    test_ids   = load_ids(data.get("test_csv"))
 
-        # Expected IDs by split
-        train_ids = load_ids(train_csv)
-        val_ids   = load_ids(val_csv)
-        test_ids  = load_ids(test_csv)
+    expected = {
+        "train": train_ids,
+        "val": val_ids,
+        "test": test_ids,
+    }[split]
 
-        if split == "train":
-            expected = train_ids
-        elif split == "val":
-            expected = val_ids
-        else:
-            expected = test_ids
+    wrong_split = subset_ids - expected
+    if wrong_split:
+        print(f"[ERROR] {len(wrong_split)} subset IDs not in '{split}' split")
+        print(list(wrong_split)[:10])
+    else:
+        print("[OK] Subset belongs to correct split")
 
-        # Check subset in correct split
-        missing_from_split = subset_ids - expected
-        if missing_from_split:
-            print(f"[ERROR] {len(missing_from_split)} subset IDs do NOT belong to split '{split}'!")
-            print(list(missing_from_split)[:10])
-        else:
-            print("[OK] Subset IDs correctly belong to split.")
+    leaks = {
+        "train": subset_ids & train_ids,
+        "val": subset_ids & val_ids,
+        "test": subset_ids & test_ids,
+    }
 
-        # Leakage into wrong splits
-        leaks = {
-            "TRAIN": subset_ids & train_ids if split != "train" else set(),
-            "VAL":   subset_ids & val_ids   if split != "val"   else set(),
-            "TEST":  subset_ids & test_ids  if split != "test"  else set(),
-        }
+    leaks[split] = set()  # ignore correct split
 
-        leaked = False
-        for name, leak in leaks.items():
-            if leak:
-                leaked = True
-                print(f"[ERROR] {len(leak)} subset IDs leak into {name}!")
-                print(list(leak)[:10])
+    leaked = False
+    for name, ids in leaks.items():
+        if ids:
+            leaked = True
+            print(f"[ERROR] {len(ids)} IDs leak into {name.upper()}")
+            print(list(ids)[:10])
 
-        if not leaked:
-            print("[OK] No subset leakage detected.")
+    if not leaked:
+        print("[OK] No split leakage detected")
 
-    print("\n========== CONSISTENCY CHECK COMPLETE ==========\n")
+    print("\n========== CHECK COMPLETE ==========\n")

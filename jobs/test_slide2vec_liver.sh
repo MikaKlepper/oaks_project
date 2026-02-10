@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --qos=low
+#SBATCH --qos=high
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=8

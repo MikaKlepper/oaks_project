@@ -2,18 +2,15 @@ from pathlib import Path
 import torch
 from tqdm import tqdm
 
-
-# --------------------------------------------------------
-# Load raw slide feature file and normalize shapes
-# --------------------------------------------------------
+# load slide features for each encoder type, and normalize shapes to (N, D) or (1, D)
 def load_raw_feature(path):
     """
     Loads slide features from any encoder.
     Normalizes shapes:
 
-        (D,)         → (1, D)
-        (N, D)       → (N, D)
-        (N, D, 1, 1) → (N, D)  # CNN backbones (ResNet50, Hibou, etc.)
+        (D,)         -> (1, D)  # single vector (e.g. PRISM (Slide-level embeddings))
+        (N, D)       -> (N, D)  # standard tile-level FMs
+        (N, D, 1, 1) -> (N, D)  # CNN backbones (ResNet50, Hibou, etc.)
     """
     x = torch.load(path, map_location="cpu")
 
@@ -21,11 +18,11 @@ def load_raw_feature(path):
     if x.ndim == 4 and x.shape[-2:] == (1, 1):
         x = x.squeeze(-1).squeeze(-1)
 
-    # Single vector
+    # Single vector (D,) -> (1, D)
     if x.ndim == 1:
         x = x.unsqueeze(0)
 
-    # Valid tile-bag
+    # If already (N, D), do nothing (tile-level FMs)
     elif x.ndim == 2:
         pass
 
@@ -37,16 +34,24 @@ def load_raw_feature(path):
 
     return x
 
-
-# --------------------------------------------------------
-# Slide feature processing (raw → final (D,))
-# --------------------------------------------------------
 def process_slide_features(prepared):
     """
-    Safe, non-parallel slide preprocessing:
-    - Handles huge (>100MB) tilebags
-    - Works with all encoders including CNN feature maps
-    - Creates exactly one (D,) vector per slide
+    Process slide features from raw tile-level embeddings.
+
+    This function takes prepared data which contains the following:
+    - raw_slide_dir: directory containing raw tile-level embeddings for each slide
+    - slide_dir: directory to store aggregated slide-level embeddings
+    - aggregate: aggregation method to apply to tile-level embeddings in each slide
+    - embed_dim: expected dimension of the aggregated slide-level embeddings
+
+    The function will load each slide's tile-level embeddings, aggregate them using the specified method,
+    and save the resulting slide-level embeddings to the specified slide_dir.
+
+    If a slide's tile-level embeddings are missing or if the aggregated vector does not match the expected embed_dim,
+    the function will print a warning and skip that slide.
+
+    :param prepared: prepared data containing the necessary information
+    :return: None
     """
     data = prepared["data"]
     df = data["df"]
@@ -58,71 +63,41 @@ def process_slide_features(prepared):
     aggregate = data.get("aggregate", "mean")
     embed_dim = int(data["embed_dim"])
 
-    slide_ids = df["slide_id"].astype(str).tolist()
+    slide_ids = df["slide_id"].astype(str)
 
-    print(f"[SLIDE] Processing {len(slide_ids)} slides (no multiprocessing)")
-    print(f"[SLIDE] Raw dir:  {raw_dir}")
-    print(f"[SLIDE] Out dir:  {out_dir}")
-    print(f"[SLIDE] Aggregate mode: {aggregate}")
-    print(f"[SLIDE] Expected embedding dim: {embed_dim}\n")
+    print(f"[SLIDE] Processing {len(slide_ids)} slides")
 
-    # ----------------------------------------------------
-    # Aggregation method
-    # ----------------------------------------------------
-    def reduce_fn(x):
-        if aggregate == "mean":
-            return x.mean(0)
-        if aggregate == "max":
-            return x.max(0)[0]
-        if aggregate == "min":
-            return x.min(0)[0]
-        raise ValueError(f"[ERROR] Unknown aggregation mode '{aggregate}'")
+    # aggregation
+    if aggregate == "mean":
+        reduce_fn = lambda x: x.mean(0)
+    elif aggregate == "max":
+        reduce_fn = lambda x: x.max(0).values
+    elif aggregate == "min":
+        reduce_fn = lambda x: x.min(0).values
+    else:
+        raise ValueError(f"Unknown aggregation mode '{aggregate}'")
 
-    # ----------------------------------------------------
-    # Process each slide (cached)
-    # ----------------------------------------------------
     for sid in tqdm(slide_ids, ncols=120):
         raw_path = raw_dir / f"{sid}.pt"
         out_path = out_dir / f"{sid}.pt"
 
-        # Skip if cached
         if out_path.exists():
             continue
-
         if not raw_path.exists():
-            print(f"[WARN] Missing raw slide file: {raw_path}")
+            print(f"[WARN] Missing {raw_path}")
             continue
 
-        # Load slide
         try:
             x = load_raw_feature(raw_path)
+            vec = reduce_fn(x)
         except Exception as e:
-            print(f"[ERR] Could not load {raw_path}: {e}")
+            print(f"[ERR] {sid}: {e}")
             continue
 
-        # Aggregate tiles → one vector
-        reduced = reduce_fn(x)
-
-        # Remove unnecessary dims
-        if reduced.ndim > 1:
-            reduced = reduced.reshape(-1)  # flatten safely
-
-        if reduced.numel() != embed_dim:
-            print(
-                f"[ERR] Slide {sid}: got dim {reduced.numel()}, expected {embed_dim}. Skipping."
-            )
-            del x
+        if vec.numel() != embed_dim:
+            print(f"[ERR] {sid}: dim {vec.numel()} ≠ {embed_dim}")
             continue
 
-        # Save
-        try:
-            torch.save(reduced, out_path)
-        except Exception as e:
-            print(f"[ERR] Failed to save {out_path}: {e}")
-
-        # Cleanup
-        del x
-        del reduced
-        torch.cuda.empty_cache()
+        torch.save(vec, out_path)
 
     print("\n[SLIDE] Slide-level feature creation complete.\n")

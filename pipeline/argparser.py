@@ -33,11 +33,9 @@ def get_args():
 
     # Aggregation type
     parser.add_argument("--agg", type=str, default=None,
-        choices=["mean", "max", "min", "sum"])
+        choices=["mean", "max", "min"])
 
-    # -------------------------------
-    # Minimal subset flags (final design)
-    # -------------------------------
+    # Subset CSVs for training, evaluation, and testing
     parser.add_argument("--train_subset_csv", type=str, default=None,
         help="Subset CSV to use only during training")
 
@@ -57,11 +55,8 @@ def get_args():
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--device", type=str)
 
-    # Checkpoint for eval
-    parser.add_argument("--model_path", type=str, default=None)
+    # # Checkpoint for eval
+    # parser.add_argument("--model_path", type=str, default=None)
 
-    # Behavior flags
-    parser.add_argument("--dry_run", action="store_true")
-    parser.add_argument("--overwrite", action="store_true")
 
     return parser.parse_args()

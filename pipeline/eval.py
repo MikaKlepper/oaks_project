@@ -36,19 +36,16 @@ def run_eval(cfg):
     logging.info(f"========== {stage.upper()} ==========")
     logging.info(f"[Eval] Dataset split: {cfg.datasets.split}")
 
-    # -------------------------------------------------
-    # Data
-    # -------------------------------------------------
+    # Load and prepare dataset inputs (metadata, feature directories, IDs, labels, etc.)
     prepared = prepare_dataset_inputs(cfg)
     ensure_cached_features(prepared)
     check_subset_consistency(prepared)
 
+    # Create PyTorch dataset for evaluation
     dataset = ToxicologyDataset(prepared)
     data = prepared["data"]
 
-    # -------------------------------------------------
-    # Model
-    # -------------------------------------------------
+    # Build probe model based on config and get checkpoint path
     probe = build_probe(
         prepared,
         input_dim=data["embed_dim"],
@@ -58,19 +55,15 @@ def run_eval(cfg):
     ckpt_path = default_probe_path(
         prepared, exp_root, isinstance(probe, TorchProbe)
     )
-    logging.info(f"[Eval] Loading checkpoint → {ckpt_path}")
+    logging.info(f"[Eval] Loading checkpoint from {ckpt_path}")
     probe.load(ckpt_path)
 
-    # -------------------------------------------------
-    # Predictions
-    # -------------------------------------------------
+    # Run predictions
     logging.info("[Eval] Running predictions…")
     y_pred = probe.predict(dataset)
     y_true = np.asarray(dataset.labels)
 
-    # -------------------------------------------------
-    # Misclassification analysis
-    # -------------------------------------------------
+    # misclassification analysis: log and analyze misclassified samples, save results to exp_root/eval/misclassification_analysis.csv (or test/)
     run_misclassification_analysis(
         dataset=dataset,
         y_true=y_true,
@@ -79,17 +72,13 @@ def run_eval(cfg):
         stage=stage,
     )
 
-    # -------------------------------------------------
-    # Probabilities (optional)
-    # -------------------------------------------------
+    # optional: predict probabilities
     try:
         y_proba = probe.predict_proba(dataset)
     except Exception:
         y_proba = None
 
-    # -------------------------------------------------
-    # Metrics
-    # -------------------------------------------------
+    # compute and log metrics
     metrics = compute_and_log_metrics(
         y_true=y_true,
         y_pred=y_pred,
@@ -100,7 +89,7 @@ def run_eval(cfg):
 
     log_benchmark(cfg, metrics)
 
-    logging.info(f"[{stage.upper()}] Final metrics → {metrics}")
+    logging.info(f"[{stage.upper()}] Final metrics -> {metrics}")
     logging.info(f"========== {stage.upper()} DONE ==========")
 
 

@@ -19,18 +19,22 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 
-
-# ---------------------------------------------------------
-# Helper: ensure directory exists
-# ---------------------------------------------------------
+# helper to ensure directory exists
 def _ensure_dir(path: Path) -> Path:
+    """
+    Ensures that a given directory exists by creating it recursively if it doesn't already exist.
+
+    Args:
+        path: The path to the directory to be ensured.
+
+    Returns:
+        The ensured path object.
+    """
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-# ---------------------------------------------------------
-# Confusion Matrix (matplotlib only)
-# ---------------------------------------------------------
+# plotting functions
 def plot_confusion_matrix(y_true, y_pred, out_path: Path, class_names=None):
     """
     Saves a confusion matrix using sklearn's ConfusionMatrixDisplay.
@@ -50,9 +54,7 @@ def plot_confusion_matrix(y_true, y_pred, out_path: Path, class_names=None):
     logging.info(f"[Metrics] Saved confusion matrix → {out_path}")
 
 
-# ---------------------------------------------------------
-# ROC Curve (binary only)
-# ---------------------------------------------------------
+# roc curve plotting for binary classification
 def plot_roc_binary(y_true, y_score, out_path: Path):
     """
     Saves a binary ROC curve using pure matplotlib.
@@ -72,12 +74,10 @@ def plot_roc_binary(y_true, y_score, out_path: Path):
     plt.savefig(out_path, dpi=150)
     plt.close()
 
-    logging.info(f"[Metrics] Saved ROC curve → {out_path}")
+    logging.info(f"[Metrics] Saved ROC curve -> {out_path}")
 
 
-# ---------------------------------------------------------
-# Main metric computation
-# ---------------------------------------------------------
+# main function to compute and log all metrics
 def compute_and_log_metrics(
         y_true: np.ndarray,
         y_pred: np.ndarray,
@@ -95,9 +95,7 @@ def compute_and_log_metrics(
 
     metrics_dir = _ensure_dir(Path(exp_root) / "metrics")
 
-    # --------------------------------------------
-    # Basic metrics
-    # --------------------------------------------
+    # basic classification metrics
     acc = accuracy_score(y_true, y_pred)
     prec = precision_score(y_true, y_pred, zero_division=0)
     rec = recall_score(y_true, y_pred, zero_division=0)
@@ -112,9 +110,7 @@ def compute_and_log_metrics(
     cm_path = metrics_dir / "confusion_matrix.png"
     plot_confusion_matrix(y_true, y_pred, cm_path, class_names)
 
-    # --------------------------------------------
-    # ROC AUC (binary only)
-    # --------------------------------------------
+    # ROC AUC for binary classification only 
     roc_auc = None
     if y_proba is not None and len(np.unique(y_true)) == 2:
 
@@ -130,17 +126,13 @@ def compute_and_log_metrics(
 
         logging.info(f"[Metrics] ROC AUC: {roc_auc:.4f}")
 
-    # --------------------------------------------
-    # Classification report
-    # --------------------------------------------
+    # classification report
     report_text = classification_report(y_true, y_pred, digits=4)
     with open(metrics_dir / "classification_report.txt", "w") as f:
         f.write(report_text)
     logging.info(f"[Metrics] Saved classification_report.txt")
 
-    # --------------------------------------------
-    # Store all numeric metrics
-    # --------------------------------------------
+    # metrics dict for JSON logging
     metrics = {
         "accuracy": float(acc),
         "precision": float(prec),

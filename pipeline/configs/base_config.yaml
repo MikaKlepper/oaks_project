@@ -1,6 +1,6 @@
 # Base configuration for the OAKS Toxicology Pipeline
 
-experiment_root: "outputs/experiments_benchmark/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
+experiment_root: "outputs/experiments_benchmark_final/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
 
 data:
   project_root: "/data/temporary/mika/repos/oaks_project"
@@ -17,7 +17,6 @@ datasets:
   subset_fraction: null
   eval_subset_csv: null
  
-
   train: "${data.data_root}/Splits/train.csv"
   val:   "${data.data_root}/Splits/val.csv"
   test:  "${data.data_root}/Splits/test.csv"

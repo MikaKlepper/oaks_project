@@ -5,10 +5,17 @@ import matplotlib as mpl
 import seaborn as sns
 
 
-# ==========================================================
-# Pretty names for encoders
-# ==========================================================
+# prettify function
 def prettify(name: str) -> str:
+    """
+    Maps a foundation model name to a human-readable string for plotting.
+
+    Args:
+        name: str, the foundation model name to map.
+
+    Returns:
+        str, the human-readable name for plotting.
+    """
     mapping = {
         "H_OPTIMUS_1": "H-Optimus-1",
         "H_OPTIMUS_0": "H-Optimus-0",
@@ -31,9 +38,7 @@ def prettify(name: str) -> str:
     return mapping.get(name, name.replace("_", "-"))
 
 
-# ==========================================================
-# Global styling
-# ==========================================================
+# seaborn / matplotlib style settings
 sns.set_theme(style="whitegrid", font_scale=1.25)
 
 mpl.rcParams.update({
@@ -45,10 +50,17 @@ mpl.rcParams.update({
 })
 
 
-# ==========================================================
-# Distinct color + marker mapping
-# ==========================================================
+# encoder style maps
 def _get_encoder_style_maps(encoders):
+    """
+    Maps each encoder name to a color and marker style for plotting.
+
+    Parameters:
+        encoders (list[str]): a list of encoder names
+
+    Returns:
+        tuple[dict[str, str], dict[str, str]]: a tuple of two dictionaries, where the first dictionary maps each encoder name to a color, and the second dictionary maps each encoder name to a marker style.
+    """
     colors = (
         list(plt.get_cmap("tab20").colors)
         + list(plt.get_cmap("tab20b").colors)
@@ -67,10 +79,22 @@ def _get_encoder_style_maps(encoders):
     return color_map, marker_map
 
 
-# ==========================================================
-# Learning curve plot
-# ==========================================================
+# learning curve plotting
 def plot_learning_curve(df, out_dir: Path, agg: str):
+    """
+    Plots the learning curve for each probe, with each encoder represented by a different color and marker style.
+
+    Parameters:
+        df (pandas.DataFrame): the input dataframe containing the results of the benchmark
+        out_dir (Path): the directory where the plot will be saved
+        agg (str): the type of aggregation used for the benchmark (e.g., "mean", "median")
+
+    Returns:
+        None
+
+    Notes:
+        The plot will be saved as a PNG file in the specified output directory, with the filename in the format {agg}_learning_curve_{probe}.png
+    """
     df = df.sort_values("k_shot")
     df["pretty_encoder"] = df["encoder"].apply(prettify)
 
@@ -150,10 +174,24 @@ def plot_learning_curve(df, out_dir: Path, agg: str):
         print(f"[PNG] Saved → {outfile}")
 
 
-# ==========================================================
-# Tables of best results
-# ==========================================================
+# tables of best results
 def generate_best_tables(df, out_dir: Path, agg: str):
+    """
+    Generates two tables of best results for each probe.
+
+    The first table contains the best result for each probe per k-shot, while the second table contains the best result for each probe overall (across all k-shots).
+
+    Parameters:
+        df (pandas.DataFrame): the input dataframe containing the results of the benchmark
+        out_dir (Path): the directory where the tables will be saved
+        agg (str): the type of aggregation used for the benchmark (e.g., "mean", "median")
+
+    Returns:
+        None
+
+    Notes:
+        The tables will be saved as two CSV files in the specified output directory, with the filenames in the format {agg}_best_per_probe_per_k.csv and {agg}_best_per_probe_overall.csv
+    """
     best_per_k = df.loc[df.groupby(["probe", "k_shot"])["roc_auc"].idxmax()]
     best_overall = df.loc[df.groupby("probe")["roc_auc"].idxmax()]
 
@@ -163,10 +201,22 @@ def generate_best_tables(df, out_dir: Path, agg: str):
     print("[CSV] Saved best tables")
 
 
-# ==========================================================
-# Heatmaps
-# ==========================================================
+# heatmap generation
 def generate_heatmaps(df, out_dir: Path, agg: str):
+    """
+    Generates a heatmap for each k-shot value and an overall mean heatmap.
+
+    Parameters:
+        df (pandas.DataFrame): the input dataframe containing the results of the benchmark
+        out_dir (Path): the directory where the heatmaps will be saved
+        agg (str): the type of aggregation used for the benchmark (e.g., "mean", "median")
+
+    Returns:
+        None
+
+    Notes:
+        The heatmaps will be saved as PNG files in the specified output directory, with the filenames in the format {agg}_heatmap_k{k}.png and {agg}_heatmap_mean.png
+    """
     k_values = sorted(df["k_shot"].unique())
 
     for k in k_values:
@@ -220,9 +270,7 @@ def generate_heatmaps(df, out_dir: Path, agg: str):
     print(f"[Heatmap] Saved → {out}")
 
 
-# ==========================================================
-# Master function
-# ==========================================================
+# main function to run all plots
 def run_all_plots(agg: str, stage: str):
     """
     Generate all plots and tables for a given aggregation and stage.
@@ -247,4 +295,4 @@ def run_all_plots(agg: str, stage: str):
     generate_best_tables(df, out_dir, agg)
     generate_heatmaps(df, out_dir, agg)
 
-    print(f"[DONE] All plots saved under → {out_dir}")
+    print(f"[DONE] All plots saved under -> {out_dir}")

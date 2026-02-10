@@ -33,8 +33,10 @@ BASE_CONFIG = "configs/base_config.yaml"
 ENCODERS =["H_OPTIMUS_1"]  # TEMPORARY LIMIT FOR TESTING
 
 PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf"]
-K_VALUES = [100, 80, 40, 20, 5, 1]
+# K_VALUES = [2953,100, 80, 40, 20, 10, 5, 1]
+K_VALUES = [100, 80, 40, 20, 10, 5, 1]
 # AGGREGATION_METHODS = ["mean", "max", "min"]
+# AGGREGATION_METHODS = ["mean", "max", "min"]  # TEMPORARY LIMIT FOR TESTING
 AGGREGATION_METHODS = ["mean"]  # TEMPORARY LIMIT FOR TESTING
 EPOCHS = 100
 
@@ -99,7 +101,8 @@ def run_benchmark():
             print(f"[SKIP] knn cannot use k=1")
             continue
 
-        if experiment_exists(model, probe, k, agg, stage="eval"):
+        if experiment_exists(model, probe, k, agg, stage="eval") and \
+            experiment_exists(model, probe, k, agg, stage="test"):
             print(f"[SKIP] Already benchmarked.")
             continue
 
