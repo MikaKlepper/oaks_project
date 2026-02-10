@@ -35,16 +35,26 @@ ENCODERS =["H_OPTIMUS_1"]  # TEMPORARY LIMIT FOR TESTING
 PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf"]
 # K_VALUES = [2953,100, 80, 40, 20, 10, 5, 1]
 K_VALUES = [100, 80, 40, 20, 10, 5, 1]
-# AGGREGATION_METHODS = ["mean", "max", "min"]
 # AGGREGATION_METHODS = ["mean", "max", "min"]  # TEMPORARY LIMIT FOR TESTING
 AGGREGATION_METHODS = ["mean"]  # TEMPORARY LIMIT FOR TESTING
 EPOCHS = 100
 
 
-# ============================================================
-# Check if experiment already exists (via benchmark CSV)
-# ============================================================
+# check if experiment already exists in eval and test results
 def experiment_exists(model, probe, k, agg, stage="eval"):
+    """
+    Checks if an experiment already exists in the benchmark results.
+
+    Parameters:
+        model (str): the name of the foundation model
+        probe (str): the name of the probe
+        k (int): the number of shots
+        agg (str): the aggregation method used for the benchmark
+        stage (str, optional): the stage of the benchmark ("eval" or "test"). Defaults to "eval".
+
+    Returns:
+        bool: whether the experiment already exists
+    """
     benchmark_file = Path("outputs") / stage / f"{agg}_benchmark_results.csv"
     if not benchmark_file.exists():
         return False
@@ -59,11 +69,19 @@ def experiment_exists(model, probe, k, agg, stage="eval"):
 
     return match.any()
 
-
-# ============================================================
-# Run one experiment
-# ============================================================
+# function to run a single experiment
 def run_experiment(model, probe, k, agg):
+    """
+    Runs a single experiment of the benchmark.
+
+    Parameters:
+        model (str): the name of the foundation model
+        probe (str): the name of the probe
+        k (int): the number of shots
+        agg (str): the aggregation method used for the benchmark
+
+    Prints the command to be executed and runs it using subprocess.run.
+    """
     cmd = [
         sys.executable,
         "main.py",
@@ -85,17 +103,22 @@ def run_experiment(model, probe, k, agg):
     subprocess.run(cmd, check=True)
 
 
-# ============================================================
-# Main benchmark loop (with progress counter)
-# ============================================================
+# main function to run the full benchmark
 def run_benchmark():
+    """
+    Runs the full benchmark of the probes on the foundation models.
+
+    The benchmark is run for all combinations of foundation models, probes, k-shot values, and aggregation methods.
+    If an experiment has already been benchmarked, it is skipped.
+    After all experiments have been run, plots are generated for the evaluation and test sets.
+    """
     combos = list(itertools.product(ENCODERS, PROBES, K_VALUES, AGGREGATION_METHODS))
     total = len(combos)
 
     print(f"[BENCHMARK] Total experiments (theoretical): {total}")
 
     for idx, (model, probe, k, agg) in enumerate(combos, start=1):
-        print(f"\n[PROGRESS] {idx}/{total} → MODEL={model} PROBE={probe} k={k} agg={agg}")
+        print(f"\n[PROGRESS] {idx}/{total} -> MODEL={model} PROBE={probe} k={k} agg={agg}")
 
         if probe == "knn" and k == 1:
             print(f"[SKIP] knn cannot use k=1")
@@ -117,9 +140,7 @@ def run_benchmark():
         print(f"[DONE] MODEL={model} PROBE={probe} k={k} agg={agg}")
         time.sleep(1)
 
-    # ===================================================
-    # Generate plots for eval and test
-    # ===================================================
+    
     print("\n==============================================")
     print("  GENERATING BENCHMARK PLOTS")
     print("==============================================\n")
