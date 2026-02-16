@@ -14,6 +14,10 @@ from data.prepare_dataset import prepare_dataset_inputs
 from data.create_datasets import ToxicologyDataset
 from data.dataset_check import check_subset_consistency
 
+from data.create_dataset_MIL import ToxicologyMILDataset
+from data.collate_MIL import collate_mil
+from probes import MILTorchProbe
+
 from probes import build_probe, TorchProbe, default_probe_path
 from metrics import compute_and_log_metrics
 from logger import setup_logger
@@ -36,13 +40,24 @@ def run_eval(cfg):
     logging.info(f"========== {stage.upper()} ==========")
     logging.info(f"[Eval] Dataset split: {cfg.datasets.split}")
 
-    # Load and prepare dataset inputs (metadata, feature directories, IDs, labels, etc.)
+    #load and prepare dataset inputs (metadata, feature directories, IDs, labels, etc.)
     prepared = prepare_dataset_inputs(cfg)
-    ensure_cached_features(prepared)
-    check_subset_consistency(prepared)
 
-    # Create PyTorch dataset for evaluation
-    dataset = ToxicologyDataset(prepared)
+    probe_type = prepared["probe"]["type"].lower()
+
+    # only probes work on pooled features, need cached features + subset consistency checks
+    if probe_type not in {"abmil", "clam", "dsmil"}:
+        ensure_cached_features(prepared)
+        check_subset_consistency(prepared)
+
+    # create PyTorch dataset for evaluation (pooled vs MIL)
+    if probe_type in {"abmil", "clam", "dsmil"}:
+        dataset = ToxicologyMILDataset(prepared)
+        collate_fn = collate_mil
+    else:
+        dataset = ToxicologyDataset(prepared)
+        collate_fn = None
+
     data = prepared["data"]
 
     # Build probe model based on config and get checkpoint path
@@ -60,10 +75,12 @@ def run_eval(cfg):
 
     # Run predictions
     logging.info("[Eval] Running predictions…")
-    y_pred = probe.predict(dataset)
+    y_pred = probe.predict(dataset, collate_fn=collate_fn)
+
     y_true = np.asarray(dataset.labels)
 
-    # misclassification analysis: log and analyze misclassified samples, save results to exp_root/eval/misclassification_analysis.csv (or test/)
+    # misclassification analysis: log and analyze misclassified samples,
+    # save results to exp_root/eval/misclassification_analysis.csv (or test/)
     run_misclassification_analysis(
         dataset=dataset,
         y_true=y_true,
@@ -74,7 +91,7 @@ def run_eval(cfg):
 
     # optional: predict probabilities
     try:
-        y_proba = probe.predict_proba(dataset)
+        y_proba = probe.predict_proba(dataset, collate_fn=collate_fn)
     except Exception:
         y_proba = None
 

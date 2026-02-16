@@ -55,7 +55,7 @@ fewshot:
   k: null
 
 runtime:
-  num_workers: 4
+  num_workers: 0
   batch_size: 16
   epochs: 60
   lr: 1e-4

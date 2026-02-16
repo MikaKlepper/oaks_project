@@ -11,6 +11,10 @@ from utils.feature_cache import ensure_cached_features
 from data.create_datasets import ToxicologyDataset
 from data.dataset_check import check_subset_consistency
 
+from data.create_dataset_MIL import ToxicologyMILDataset
+from data.collate_MIL import collate_mil
+from probes import MILTorchProbe
+
 from probes import build_probe, TorchProbe, default_probe_path
 from logger import setup_logger
 
@@ -36,14 +40,20 @@ def run_train(cfg):
     # load and prepare dataset inputs (metadata, feature directories, IDs, labels, etc.)
     prepared = prepare_dataset_inputs(cfg)
 
-    # feature caching: ensure all required features are computed and cached before training
-    ensure_cached_features(prepared)
+    probe_type = prepared["probe"]["type"].lower()
 
-    # check subset consistency: if using a subset for training, ensure no leakage and consistency with metadata and features
-    check_subset_consistency(prepared)
+    # feature caching + subset consistency only needed for probes that don't use MIL directly
+    if probe_type not in {"abmil", "clam", "dsmil"}:
+        ensure_cached_features(prepared)
+        check_subset_consistency(prepared)
 
-    # create PyTorch dataset for training
-    dataset = ToxicologyDataset(prepared)
+    # create PyTorch dataset for training (pooled vs MIL) based on probe type
+    if probe_type in {"abmil", "clam", "dsmil"}:
+        dataset = ToxicologyMILDataset(prepared)
+        collate_fn = collate_mil
+    else:
+        dataset = ToxicologyDataset(prepared)
+        collate_fn = None
 
     # build probe model based on config and get checkpoint path
     input_dim = prepared["data"]["embed_dim"]
@@ -52,14 +62,14 @@ def run_train(cfg):
     probe = build_probe(prepared, input_dim, num_classes)
     ckpt_path = default_probe_path(prepared, exp_root, isinstance(probe, TorchProbe))
 
-    # check if checkpoint already exists to skip training if so 
+    # check if checkpoint already exists to skip training if so
     if ckpt_path.exists():
         logging.info(f"[Train] Checkpoint already exists -> skipping training.")
         return
-    
+
     # otherwise, fit the probe to the dataset and save the checkpoint
     logging.info("[Train] Starting training…")
-    probe.fit(dataset)
+    probe.fit(dataset, collate_fn=collate_fn)
     probe.save(ckpt_path)
 
     logging.info(f"[Train] Saved checkpoint -> {ckpt_path}")

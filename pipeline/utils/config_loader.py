@@ -139,6 +139,9 @@ def load_merged_config(config_path, args=None):
     # 1) apply CLI overrides
     cfg, _ = incorporate_cli_args(base_cfg, args)
 
+    if cfg.probe.type.lower() in {"abmil", "clam","dsmil"}:
+        cfg.aggregation.type = "MIL"
+
     # 2) build directories for raw and cached features
     dirs = build_feature_dirs(
         features_root=cfg.features.features_root,

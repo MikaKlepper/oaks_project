@@ -42,7 +42,7 @@ def run_stage(stage: str, args, exp_root: Path):
 
     Note: This function will block until the specified stage has finished running. If the stage fails, this function will raise a CalledProcessError.
     """
-    stage_args = SimpleNamespace(**vars(args), stage=stage)
+    stage_args = SimpleNamespace(**{**vars(args), "stage": stage})
     cfg = load_merged_config(args.config, stage_args)
 
     cfg.stage = stage
@@ -68,7 +68,8 @@ def main():
 
     # Decide which stages to run
     if args.stage == "all":
-        stages = ["train", "eval", "test"]
+        # stages = ["train", "eval", "test"]
+        stages = ["train", "eval"]
     else:
         stages = [args.stage]
 

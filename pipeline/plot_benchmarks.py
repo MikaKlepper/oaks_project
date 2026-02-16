@@ -296,3 +296,72 @@ def run_all_plots(agg: str, stage: str):
     generate_heatmaps(df, out_dir, agg)
 
     print(f"[DONE] All plots saved under -> {out_dir}")
+
+
+def combine_mil_and_mean(stage: str, out_name: str = "combined_benchmark_results.csv"):
+    """
+    Combine MIL and mean benchmark CSVs into a single CSV.
+
+    Args:
+        stage (str): 'eval' or 'test'
+        out_name (str): name of the combined output CSV
+    """
+    base_dir = Path("outputs") / stage
+
+    mean_file = base_dir / "mean_benchmark_results.csv"
+    mil_file = base_dir / "MIL_benchmark_results.csv"
+
+    dfs = []
+
+    if mean_file.exists():
+        df_mean = pd.read_csv(mean_file)
+        df_mean["agg"] = "mean"
+        dfs.append(df_mean)
+    else:
+        print(f"[WARN] Missing file: {mean_file}")
+
+    if mil_file.exists():
+        df_mil = pd.read_csv(mil_file)
+        df_mil["agg"] = "MIL"
+        dfs.append(df_mil)
+    else:
+        print(f"[WARN] Missing file: {mil_file}")
+
+    if not dfs:
+        print("[ERROR] No benchmark files found to combine.")
+        return
+
+    df_combined = pd.concat(dfs, ignore_index=True)
+
+    out_path = base_dir / out_name
+    df_combined.to_csv(out_path, index=False)
+
+    print(f"[CSV] Combined benchmark saved → {out_path}")
+
+
+def run_all_plots_combined(stage: str):
+    """
+    Generate all benchmark plots treating MIL probes (abmil, clam)
+    as regular probes, using the combined benchmark CSV.
+    """
+    combined_file = Path("outputs") / stage / "combined_benchmark_results.csv"
+    if not combined_file.exists():
+        print(f"[ERROR] Missing combined benchmark file: {combined_file}")
+        return
+
+    df = pd.read_csv(combined_file)
+
+    if "agg" in df.columns:
+        df = df.drop(columns=["agg"])
+
+    out_dir = Path("outputs") / stage / "combined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"[INFO] Loaded {len(df)} rows from → {combined_file}")
+    print("[INFO] Generating unified plots across ALL probes (incl. MIL)")
+
+    plot_learning_curve(df, out_dir, agg="combined")
+    generate_best_tables(df, out_dir, agg="combined")
+    generate_heatmaps(df, out_dir, agg="combined")
+
+    print(f"[DONE] Unified benchmark plots saved under -> {out_dir}")

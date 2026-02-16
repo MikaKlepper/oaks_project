@@ -20,7 +20,7 @@ def get_args():
 
     # Probe override
     parser.add_argument("--probe", type=str, default=None,
-        choices=["linear", "mlp", "knn", "logreg", "svm_linear", "svm_rbf"])
+        choices=["linear", "mlp", "knn", "logreg", "svm_linear", "svm_rbf", "abmil", "clam", "dsmil"])
     parser.add_argument("--hidden_dim", type=int, default=None)
     parser.add_argument("--layers", type=int, default=None)
 

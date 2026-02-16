@@ -3,7 +3,7 @@ import torch
 from tqdm import tqdm
 
 # load slide features for each encoder type, and normalize shapes to (N, D) or (1, D)
-def load_raw_feature(path):
+def load_raw_features(path):
     """
     Loads slide features from any encoder.
     Normalizes shapes:
@@ -12,7 +12,7 @@ def load_raw_feature(path):
         (N, D)       -> (N, D)  # standard tile-level FMs
         (N, D, 1, 1) -> (N, D)  # CNN backbones (ResNet50, Hibou, etc.)
     """
-    x = torch.load(path, map_location="cpu")
+    x = torch.load(path, map_location="cpu", mmap=True)
 
     # CNN outputs (N, D, 1, 1)
     if x.ndim == 4 and x.shape[-2:] == (1, 1):
@@ -88,7 +88,7 @@ def process_slide_features(prepared):
             continue
 
         try:
-            x = load_raw_feature(raw_path)
+            x = load_raw_features(raw_path)
             vec = reduce_fn(x)
         except Exception as e:
             print(f"[ERR] {sid}: {e}")

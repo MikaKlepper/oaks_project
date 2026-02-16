@@ -13,18 +13,21 @@ from tqdm import tqdm
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import LinearSVC, SVC
+from sklearn.svm import SVC
 
+from torchmil.models import ABMIL
+from torchmil.models import CLAM_SB as CLAM
+from torchmil.models import DSMIL
 
 
 class BaseProbe:
-    def fit(self, dataset):
+    def fit(self, dataset, collate_fn=None):
         raise NotImplementedError
 
-    def predict(self, dataset):
+    def predict(self, dataset, collate_fn=None):
         raise NotImplementedError
 
-    def predict_proba(self, dataset):
+    def predict_proba(self, dataset, collate_fn=None):
         raise NotImplementedError
 
     def save(self, path):
@@ -36,6 +39,9 @@ class BaseProbe:
 
 class LinearHead(nn.Module):
     def __init__(self, input_dim, num_classes):
+        """
+        Initialize a LinearHead model.
+        """
         super().__init__()
         self.fc = nn.Linear(input_dim, num_classes)
 
@@ -45,6 +51,9 @@ class LinearHead(nn.Module):
 
 class MLPClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes, num_layers):
+        """
+        Initialize an MLPClassifier model.
+        """
         super().__init__()
         layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
         for _ in range(num_layers - 2):
@@ -56,9 +65,6 @@ class MLPClassifier(nn.Module):
         return self.net(x)
 
 
-# ============================================================
-# Torch Probe Config
-# ============================================================
 @dataclass
 class TorchProbeConfig:
     probe_type: str
@@ -76,15 +82,23 @@ class TorchProbeConfig:
     loss: str
     num_workers: int = 4
     patience: int = 10
-    rel_tolerance: float = 0.01  # relative tolerance for early stopping
+    rel_tolerance: float = 0.01
 
     def make_loss(self):
+        """
+        Create a loss function based on the config.
+        """
         name = self.loss.lower()
         if name == "crossentropy":
             return nn.CrossEntropyLoss()
+        if name == "bce":
+            return nn.BCEWithLogitsLoss()
         raise ValueError(f"Unsupported loss: {self.loss}")
 
     def make_optimizer(self, params):
+        """
+        Create an optimizer based on the config.
+        """
         name = self.optimizer.lower()
         if name == "adam":
             return optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
@@ -100,14 +114,11 @@ class TorchProbeConfig:
         raise ValueError(f"Unsupported optimizer: {self.optimizer}")
 
 
-# ============================================================
-# TorchProbe
-# ============================================================
-# ============================================================
-# TorchProbe (FAST VERSION)
-# ============================================================
 class TorchProbe(BaseProbe):
     def __init__(self, model: nn.Module, cfg: TorchProbeConfig):
+        """
+        Initialize a TorchProbe instance.
+        """
         self.cfg = cfg
         self.model = model.to(cfg.device)
         self.criterion = cfg.make_loss()
@@ -120,34 +131,39 @@ class TorchProbe(BaseProbe):
 
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / max(1, warmup_steps)     # linear warmup
+                return step / max(1, warmup_steps)
             progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-            return 0.5 * (1.0 + math.cos(math.pi * progress))  # cosine decay
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
 
         return optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
 
-    def fit(self, dataset):
+    def forward_batch(self, batch):
+        """
+        Forward a single batch through the model.
+        """
+        feats, labels = batch
+        feats = feats.to(self.cfg.device, non_blocking=True)
+        labels = labels.to(self.cfg.device, non_blocking=True)
+        logits = self.model(feats)
+        return logits, labels
+
+    def fit(self, dataset, collate_fn=None):
+        """
+        Train the probe on the given dataset.
+        """
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
             shuffle=True,
+            collate_fn=collate_fn,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
             persistent_workers=True,
         )
 
-        steps_per_epoch = len(loader)
-        scheduler = self._build_scheduler(steps_per_epoch)
-
-        logging.info(f"[TorchProbe] Training on device: {self.cfg.device}")
-        logging.info(str(self.model))
-
+        scheduler = self._build_scheduler(len(loader))
         best_loss = float("inf")
         best_state = None
-        global_step = 0
-
-        # early stopping
-        patience = self.cfg.patience
         best_epoch = 0
 
         for epoch in range(self.cfg.epochs):
@@ -161,21 +177,16 @@ class TorchProbe(BaseProbe):
                 leave=True,
             )
 
-            for feats, labels in pbar:
-                feats = feats.to(self.cfg.device, non_blocking=True)
-                labels = labels.to(self.cfg.device, non_blocking=True)
-
+            for batch in pbar:
                 self.optimizer.zero_grad()
-                logits = self.model(feats)
+                logits, labels = self.forward_batch(batch)
                 loss = self.criterion(logits, labels)
                 loss.backward()
                 self.optimizer.step()
                 scheduler.step()
 
-                global_step += 1
-                running_loss += loss.item() * feats.size(0)
+                running_loss += loss.item() * labels.size(0)
 
-            # compute epoch avg
             epoch_loss = running_loss / len(dataset)
             lr = scheduler.get_last_lr()[0]
 
@@ -183,11 +194,10 @@ class TorchProbe(BaseProbe):
                 f"[TorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
                 f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
             )
-            # early stopping check
+
             improvement = best_loss - epoch_loss
             required_improvement = best_loss * self.cfg.rel_tolerance
             if best_loss == float("inf") or improvement > required_improvement:
-                # Accept improvement or first epoch
                 best_loss = epoch_loss
                 best_epoch = epoch
                 best_state = {
@@ -195,11 +205,9 @@ class TorchProbe(BaseProbe):
                     for k, v in self.model.state_dict().items()
                 }
             else:
-                # No significant improvement
-                if epoch - best_epoch >= patience:
+                if epoch - best_epoch >= self.cfg.patience:
                     tqdm.write(
-                        f"[TorchProbe] Early stopping at epoch {epoch+1} "
-                        f"(no improvement for {patience} epochs)"
+                        f"[TorchProbe] Early stopping at epoch {epoch+1}"
                     )
                     break
 
@@ -207,121 +215,213 @@ class TorchProbe(BaseProbe):
             self.model.load_state_dict(best_state)
             logging.info(f"[TorchProbe] Restored best model (loss={best_loss:.4f})")
 
-    def predict(self, dataset):
-        loader = DataLoader(dataset, batch_size=len(dataset), num_workers=4)
-        preds = []
+    def predict(self, dataset, collate_fn=None):
+        """
+        Predict class labels for the given dataset.
+        """
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+        )
 
         self.model.eval()
+        preds = []
+
         with torch.no_grad():
-            pbar = tqdm(
-                loader,
-                desc="Predict",
-                ncols=120,
-                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
-                           "[{elapsed}<{remaining}, {rate_fmt}]",
-            )
-            for feats, _ in pbar:
-                feats = feats.to(self.cfg.device)
-                logits = self.model(feats)
+            pbar = tqdm(loader, desc="Predict", ncols=120)
+            for batch in pbar:
+                logits, _ = self.forward_batch(batch)
                 preds.append(torch.argmax(logits, dim=1).cpu())
 
         return torch.cat(preds).numpy()
 
-    def predict_proba(self, dataset):
-        loader = DataLoader(dataset, batch_size=len(dataset), num_workers=4)
-        probs = []
+    def predict_proba(self, dataset, collate_fn=None):
+        """
+        Predict class probabilities for the given dataset.
+        """
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+        )
 
         self.model.eval()
+        probs = []
+
         with torch.no_grad():
-            pbar = tqdm(
-                loader,
-                desc="Predict Proba",
-                ncols=120,
-                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
-                           "[{elapsed}<{remaining}, {rate_fmt}]",
-            )
-            for feats, _ in pbar:
-                feats = feats.to(self.cfg.device)
-                logits = self.model(feats)
-                probs.append(torch.softmax(logits, dim=1).cpu())
+            pbar = tqdm(loader, desc="Predict Proba", ncols=120)
+            for batch in pbar:
+                logits, _ = self.forward_batch(batch)
+
+                if logits.ndim == 1:
+                    probs.append(torch.sigmoid(logits).cpu())
+                else:
+                    probs.append(torch.softmax(logits, dim=1).cpu())
 
         return torch.cat(probs).numpy()
 
     def save(self, path):
+        """
+        Save the model checkpoint to the specified path.
+        """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.model.state_dict(), path)
         logging.info(f"[TorchProbe] Saved checkpoint to {path}")
 
     def load(self, path):
+        """
+        Load the model checkpoint from the specified path.
+        """
         path = Path(path)
         state = torch.load(path, map_location=self.cfg.device)
         self.model.load_state_dict(state)
         logging.info(f"[TorchProbe] Loaded checkpoint from {path}")
 
 
-# ============================================================
-# Sklearn Probe
-# ============================================================
+class MILTorchProbe(TorchProbe):
+    """
+    MIL probe: uses torchmil compute_loss and predict.
+    """
+
+    def fit(self, dataset, collate_fn=None):
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+            pin_memory=False,
+            persistent_workers=False,
+        )
+
+        scheduler = self._build_scheduler(len(loader))
+        best_loss = float("inf")
+        best_state = None
+        best_epoch = 0
+
+        for epoch in range(self.cfg.epochs):
+            self.model.train()
+            running_loss = 0.0
+
+            pbar = tqdm(
+                loader,
+                desc=f"Epoch {epoch+1}/{self.cfg.epochs}",
+                ncols=120,
+                leave=True,
+            )
+
+            for X, mask, labels in pbar:
+                X = X.to(self.cfg.device, non_blocking=True)
+                mask = mask.to(self.cfg.device, non_blocking=True)
+                labels = labels.to(self.cfg.device, non_blocking=True).float()
+
+                self.optimizer.zero_grad()
+
+                _, loss_dict = self.model.compute_loss(labels, X, mask)
+                # print("LOSS_DICT TYPE:", type(loss_dict))
+                # print("LOSS_DICT KEYS:", list(loss_dict.keys()))
+                # print("LOSS_DICT:", {k: (v.item() if torch.is_tensor(v) else v) for k, v in loss_dict.items()})
+
+                # raise SystemExit("Stop after first batch to inspect loss_dict")
+
+                loss = loss_dict['BCEWithLogitsLoss']
+                loss.backward()
+                self.optimizer.step()
+                scheduler.step()
+
+                running_loss += loss.item() * labels.size(0)
+
+            epoch_loss = running_loss / len(dataset)
+            lr = scheduler.get_last_lr()[0]
+
+            tqdm.write(
+                f"[MILTorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
+                f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
+            )
+
+            if best_loss == float("inf") or epoch_loss < best_loss * (1 - self.cfg.rel_tolerance):
+                best_loss = epoch_loss
+                best_epoch = epoch
+                best_state = {
+                    k: v.cpu().clone()
+                    for k, v in self.model.state_dict().items()
+                }
+            elif epoch - best_epoch >= self.cfg.patience:
+                tqdm.write(f"[MILTorchProbe] Early stopping at epoch {epoch+1}")
+                break
+
+        if best_state:
+            self.model.load_state_dict(best_state)
+            logging.info(f"[MILTorchProbe] Restored best model (loss={best_loss:.4f})")
+
+    def predict(self, dataset, collate_fn=None):
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+        )
+
+        self.model.eval()
+        preds = []
+
+        with torch.no_grad():
+            for X, mask, _ in loader:
+                X = X.to(self.cfg.device)
+                mask = mask.to(self.cfg.device)
+
+                Y_pred = self.model.predict(
+                    X, mask, return_inst_pred=False
+                )
+
+                preds.append((Y_pred > 0).long().cpu())
+
+        return torch.cat(preds).numpy()
+
+    def predict_proba(self, dataset, collate_fn=None):
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+        )
+
+        self.model.eval()
+        probs = []
+
+        with torch.no_grad():
+            for X, mask, _ in loader:
+                X = X.to(self.cfg.device)
+                mask = mask.to(self.cfg.device)
+
+                Y_pred = self.model.predict(
+                    X, mask, return_inst_pred=False
+                )
+
+                probs.append(torch.sigmoid(Y_pred).cpu())
+
+        return torch.cat(probs).numpy()
+
+
 class SklearnProbe(BaseProbe):
     def __init__(self, model):
         self.model = model
 
-    def fit(self, dataset):
-        loader = DataLoader(dataset, batch_size=1024, num_workers=4)
-        X_list, y_list = [], []
+    def fit(self, dataset, collate_fn=None):
+        X, y = zip(*(dataset[i] for i in range(len(dataset))))
+        self.model.fit(np.stack(X), np.array(y))
 
-        pbar = tqdm(
-            loader,
-            desc="Sklearn: load data",
-            ncols=120,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
-                       "[{elapsed}<{remaining}, {rate_fmt}]",
-        )
-        for feats, labels in pbar:
-            X_list.append(feats.numpy())
-            y_list.append(labels.numpy())
+    def predict(self, dataset, collate_fn=None):
+        X = [dataset[i][0] for i in range(len(dataset))]
+        return self.model.predict(np.stack(X))
 
-        X = np.concatenate(X_list, axis=0)
-        y = np.concatenate(y_list, axis=0)
-
-        logging.info(f"[SklearnProbe] Fitting {self.model.__class__.__name__}")
-        self.model.fit(X, y)
-
-    def predict(self, dataset):
-        loader = DataLoader(dataset, batch_size=1024, num_workers=2)
-        preds = []
-
-        pbar = tqdm(
-            loader,
-            desc="Sklearn Predict",
-            ncols=120,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
-                       "[{elapsed}<{remaining}, {rate_fmt}]",
-        )
-        for feats, _ in pbar:
-            preds.append(self.model.predict(feats.numpy()))
-
-        return np.concatenate(preds)
-
-    def predict_proba(self, dataset):
-        if not hasattr(self.model, "predict_proba"):
-            raise NotImplementedError("This sklearn model has no predict_proba()")
-
-        loader = DataLoader(dataset, batch_size=1024, num_workers=2)
-        probs = []
-
-        pbar = tqdm(
-            loader,
-            desc="Sklearn Predict Proba",
-            ncols=120,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
-                       "[{elapsed}<{remaining}, {rate_fmt}]",
-        )
-        for feats, _ in pbar:
-            probs.append(self.model.predict_proba(feats.numpy()))
-
-        return np.concatenate(probs, axis=0)
+    def predict_proba(self, dataset, collate_fn=None):
+        X = [dataset[i][0] for i in range(len(dataset))]
+        return self.model.predict_proba(np.stack(X))
 
     def save(self, path):
         path = Path(path)
@@ -335,33 +435,19 @@ class SklearnProbe(BaseProbe):
         logging.info(f"[SklearnProbe] Loaded sklearn model from {path}")
 
 
-
-
 def default_probe_path(prepared, exp_root, is_torch=True):
-    """
-    Always save/load the probe checkpoint inside the TRAIN folder of the experiment:
-        <experiment_root>/train/probe_<type>.pt or .joblib
-    """
-
     suffix = ".pt" if is_torch else ".joblib"
     probe_type = prepared["probe"]["type"]
-
     ckpt_dir = Path(exp_root) / "train"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+    return ckpt_dir / f"probe_{probe_type}{suffix}"
 
-    filename = f"probe_{probe_type}{suffix}"
-    return ckpt_dir / filename
 
-# ============================================================
-# Probe Factory
-# ============================================================
-def build_probe(prepared, input_dim: int, num_classes: int) -> BaseProbe:
+def build_probe(prepared, input_dim: int, num_classes: int):
     p = prepared["probe"]
     r = prepared["runtime"]
 
-    device = r.get("device", None)
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = r.get("device", "cuda" if torch.cuda.is_available() else "cpu")
 
     cfg = TorchProbeConfig(
         probe_type=p["type"],
@@ -380,21 +466,35 @@ def build_probe(prepared, input_dim: int, num_classes: int) -> BaseProbe:
 
     t = p["type"].lower()
 
-    # Torch probes
     if t == "linear":
         return TorchProbe(LinearHead(input_dim, num_classes), cfg)
-    if t == "mlp":
-        return TorchProbe(MLPClassifier(input_dim, cfg.hidden_dim, num_classes, cfg.num_layers), cfg)
 
-    # Sklearn probes
+    if t == "mlp":
+        return TorchProbe(
+            MLPClassifier(input_dim, cfg.hidden_dim, num_classes, cfg.num_layers), cfg
+        )
+
+    if t == "abmil":
+        model = ABMIL(in_shape=(input_dim,), att_dim=128)
+        return MILTorchProbe(model, cfg)
+
+    if t == "clam":
+        model = CLAM(in_shape=(input_dim,))
+        return MILTorchProbe(model, cfg)
+    
+    if t == "dsmil":
+        model = DSMIL(in_shape=(input_dim,))
+        return MILTorchProbe(model, cfg)
+
     if t == "logreg":
-        return SklearnProbe(LogisticRegression(max_iter=1000, n_jobs=-1))
+        return SklearnProbe(LogisticRegression(max_iter=1000))
+
     if t == "knn":
-        return SklearnProbe(KNeighborsClassifier(n_neighbors=p["knn_neighbors"], n_jobs=-1))
-    # if t == "svm_linear":
-    #     return SklearnProbe(LinearSVC())
+        return SklearnProbe(KNeighborsClassifier(n_neighbors=p["knn_neighbors"]))
+
     if t == "svm_linear":
         return SklearnProbe(SVC(kernel="linear", probability=True))
+
     if t == "svm_rbf":
         return SklearnProbe(SVC(kernel="rbf", probability=True))
 
