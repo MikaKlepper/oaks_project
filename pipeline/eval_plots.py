@@ -6,12 +6,18 @@ import numpy as np
 
 def plot_severity_histogram(severity, out_dir):
     """
-    Plot a histogram of the distribution of severity labels in a list of severity strings.
+    Plot a histogram of the distribution of normalized severity labels.
+
+    Severity is expected to be encoded as integers:
+        1 = minimal
+        2 = slight
+        3 = moderate
+        4 = severe
 
     Parameters
     ----------
-    severity : list
-        A list of severity strings.
+    severity : list of int
+        A list of normalized severity values.
     out_dir : Path
         The directory to save the plot.
 
@@ -19,15 +25,24 @@ def plot_severity_histogram(severity, out_dir):
     -------
     None
     """
-    severity_order = ["minimal", "slight", "moderate", "severe"]
-    clean = [s for s in severity if s in severity_order]
+    severity_map = {
+        1: "minimal",
+        2: "slight",
+        3: "moderate",
+        4: "severe",
+    }
+
+    clean = [s for s in severity if s in severity_map]
 
     if not clean:
         return
 
     values, counts = np.unique(clean, return_counts=True)
-    pairs = sorted(zip(values, counts), key=lambda x: severity_order.index(x[0]))
-    labels, heights = zip(*pairs)
+
+    # enforce semantic ordering
+    order = sorted(values)
+    labels = [severity_map[v] for v in order]
+    heights = [counts[list(values).index(v)] for v in order]
 
     plt.figure(figsize=(7, 4))
     plt.bar(labels, heights)

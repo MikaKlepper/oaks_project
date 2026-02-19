@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=70G
+#SBATCH --mem=80G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="benchmark-all-models"
 #SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_benchmark.out
@@ -18,15 +18,10 @@ echo "============================"
 echo "   STARTING BENCHMARK RUN   "
 echo "============================"
 
-
-
-
 echo "[INFO] Hostname: $(hostname)"
 echo "[INFO] SLURM Job ID: $SLURM_JOB_ID"
 
-# ----------------------------------------------------------
-# Set repository path & PYTHONPATH
-# ----------------------------------------------------------
+
 REPO_DIR="/data/temporary/mika/repos/oaks_project/pipeline"
 export PYTHONPATH="$REPO_DIR:$PYTHONPATH"
 echo "[INFO] PYTHONPATH → $PYTHONPATH"
@@ -34,9 +29,6 @@ echo "[INFO] PYTHONPATH → $PYTHONPATH"
 cd "$REPO_DIR" || exit 1
 echo "[INFO] Working directory: $(pwd)"
 
-# ----------------------------------------------------------
-# Run the benchmarking script
-# ----------------------------------------------------------
 echo "[INFO] Running benchmark.py..."
 python benchmark.py
 

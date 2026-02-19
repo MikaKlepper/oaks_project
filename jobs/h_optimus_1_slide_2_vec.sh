@@ -26,7 +26,7 @@ CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1.yaml"
 
 SCRATCH_BASE="/scratch_mikaklepper_ucb"
 SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1"
-FINAL_OUTPUT_DIR="/data/temporary/toxicology/UCB/Features_FM/H_OPTIMUS_1"
+FINAL_OUTPUT_DIR="/data/temporary/toxicology/UCB/liver/Features_FM/H_OPTIMUS_1"
 
 echo "Creating required directories..."
 mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"

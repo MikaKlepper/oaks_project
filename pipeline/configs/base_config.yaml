@@ -1,45 +1,27 @@
 # Base configuration for the OAKS Toxicology Pipeline
 
-experiment_root: "outputs/experiments_benchmark_final/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
+experiment_root: "outputs/MICCAI_experiments_benchmark_final/${datasets.name}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
 
 data:
   project_root: "/data/temporary/mika/repos/oaks_project"
   data_root: "/data/temporary/mika/repos/oaks_project/splitting_data"
-
   organ: "Liver"
-  metadata_csv: "/data/pa_cpgarchive/archives/toxicology/open-tg-gates/metadata_SD/open_tggates_master_list.csv"
 
 datasets:
+  name: "tggates"        # canonical dataset key (tggates | ucb)
   use_subset: false
-  split: "train" # choices ["train", "val", "test"]
-
+  split: "train"         # ["train", "val", "test"]
   subset_csv: null
   subset_fraction: null
-  eval_subset_csv: null
- 
-  train: "${data.data_root}/Splits/train.csv"
-  val:   "${data.data_root}/Splits/val.csv"
-  test:  "${data.data_root}/Splits/test.csv"
 
-# Features
 features:
-  encoder: "UNI" #should be capitalized due to naming in savings (in my case)
-  # choices ["CONCH", "H_OPTITMUS_0","H_OPTITMUS_1", "UNI", "UNI_2", "VIRCHOW2", "KAIKO", "PHIKON", "PHIKONV2",
-  # "MIDNIGHT12K","PRISM", "RESNET50", "HIBOU_B", "HIBOU_L", "PROV_GIGAPATH_224_SLIDE",
-  # "PROV_GIGAPATH_256_SLIDE", "PROV_GIGAPATH_224_TILE", "PROV_GIGAPATH_256_TILE"]
-  features_root: "/data/temporary/toxicology/TG-GATES/liver"
+  encoder: "UNI"
+  features_root: "/data/temporary/toxicology"   # true base anchor
   cache_root: "/data/temporary/mika/repos/oaks_project/pipeline/outputs/cache"
 
-  feature_type: "animal" # choices ["animal", "slide"]
-
-  # train_animal_dir: "${features.features_root}/Trainings_FM/${features.encoder}/animal_features"
-  # train_slide_dir:   "${features.features_root}/Trainings_FM/${features.encoder}/features"
-  # val_animal_dir:   "${features.features_root}/Validations_FM/${features.encoder}/animal_features"
-  # val_slide_dir:     "${features.features_root}/Validations_FM/${features.encoder}/features"
-  # test_animal_dir:  "${features.features_root}/Tests_FM/${features.encoder}/animal_features"
-  # test_slide_dir:    "${features.features_root}/Tests_FM/${features.encoder}/features"
+  feature_type: "animal"   # ["animal", "slide"]
   use_cache: false
-  d_type: "float32"  # choices ["float32", "float16", "bfloat16"]
+  d_type: "float32"
   embed_dim: null
 
 aggregation:
@@ -60,10 +42,8 @@ runtime:
   epochs: 60
   lr: 1e-4
 
-  optimizer: "adamw"        # "adam", "adamw", "sgd", "rmsprop"
+  optimizer: "adamw"
   weight_decay: 1e-4
-  momentum: 0.9            # for SGD
-  loss: "crossentropy"     # "crossentropy", "mse", "bce"
-  device: "cuda"           # also works with "cpu" or "mps"
-
-user_input: []
+  momentum: 0.9
+  loss: "crossentropy"
+  device: "cuda"

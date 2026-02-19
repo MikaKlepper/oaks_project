@@ -4,193 +4,364 @@ import ast
 import pandas as pd
 from pathlib import Path
 
-
-# helper to robustly extract Location & Severity for Hypertrophy from the 'findings' string
-def _extract_hypertrophy_location_severity(finding_str):
+def _normalize_severity(severity):
     """
-    Parse the 'findings' string and return (location, severity) for Hypertrophy.
+    Normalize severity from a string or number to an integer.
 
-    Examples of findings strings:
-
-      "[['Hypertrophy', 'Centrilobular', 'slight', False]]"
-      "[['Ground glass appearance', 'Centrilobular', 'minimal', False], "
-      " ['Hypertrophy', 'Centrilobular', 'minimal', False]]"
-
-    If no Hypertrophy entry is found or parsing fails → (None, None).
-    """
-    if not isinstance(finding_str, str):
-        return None, None
-
-    try:
-        findings = ast.literal_eval(finding_str)
-    except Exception:
-        return None, None
-
-    if not isinstance(findings, list):
-        return None, None
-
-    for entry in findings:
-        # Expect list like: ['Hypertrophy', 'Centrilobular', 'slight', False]
-        if isinstance(entry, list) and len(entry) >= 3:
-            lesion = entry[0]
-            if isinstance(lesion, str) and lesion.lower() == "hypertrophy":
-                location = entry[1]
-                severity = entry[2]
-                return location, severity
-
-    return None, None
-
-#  helpers to load metadata, filter by organ, create labels, then filter by split CSV and optional subset fraction
-def _load_metadata(cfg):
-    """
-    Load metadata from CSV and filter by organ.
+    If the severity is None, return 0.
+    If the severity is a string, strip and convert to lower case.
+    If the severity string is in the tg_map, return the corresponding corresponding value.
+    If the severity string contains "grade", try to parse an integer from the string.
+    If the severity is an integer or float, return the integer value.
+    If none of the above conditions are met, return 0.
 
     Parameters
     ----------
-    cfg : omegaconf.DictConfig
-        Configuration object containing data paths and parameters.
+    severity : str, int, float, or None
+        The severity to normalize.
 
     Returns
     -------
-    pd.DataFrame
-        Dataframe containing the filtered metadata.
+    int
+        The normalized severity.
+    """
+    if severity is None:
+        return 0
 
+    if isinstance(severity, str):
+        s = severity.lower().strip()
+
+        if s.isdigit():
+            return int(s)
+
+        tg_map = {
+            "minimal": 1,
+            "slight": 2,
+            "moderate": 3,
+            "severe": 4,
+        }
+
+        if s in tg_map:
+            return tg_map[s]
+
+        if "grade" in s:
+            try:
+                return int(s.split("grade")[-1].strip())
+            except Exception:
+                return 0
+
+    if isinstance(severity, (int, float)):
+        return int(severity)
+
+    return 0
+
+def _extract_hypertrophy_location_severity(row):
+    """
+    Extract location and severity of hypertrophy from a given row.
+
+    Parameters
+    ----------
+    row : pandas.Series
+        A single row from a pandas DataFrame containing the data.
+
+    Returns
+    -------
+    int, str, str
+        A tuple containing the presence of hypertrophy, location and severity.
+        Presence is 1 if hypertrophy is found, 0 otherwise.
+        Location and severity are None if not found.
+    """
+    if "findings" in row and isinstance(row["findings"], str):
+        try:
+            findings = ast.literal_eval(row["findings"])
+        except Exception:
+            return 0, None, None
+
+        if isinstance(findings, list):
+            for entry in findings:
+                if isinstance(entry, list) and len(entry) >= 3:
+                    if isinstance(entry[0], str) and entry[0].lower() == "hypertrophy":
+                        return 1, entry[1], entry[2]
+
+        return 0, None, None
+
+    if "liver_findings_microscopy" in row:
+        findings = row["liver_findings_microscopy"]
+
+        if isinstance(findings, str):
+            try:
+                findings = ast.literal_eval(findings)
+            except Exception:
+                return 0, None, None
+
+        if not isinstance(findings, list):
+            return 0, None, None
+
+        for item in findings:
+            if isinstance(item, str) and "hypertrophy" in item.lower():
+                location = None
+                severity = None
+
+                if ";" in item:
+                    try:
+                        location = item.split(";")[1].split(",")[0].strip()
+                    except Exception:
+                        pass
+
+                if "grade" in item.lower():
+                    severity = item.lower().split("grade")[-1].strip()
+
+                return 1, location, severity
+
+        return 0, None, None
+
+    return 0, None, None
+
+
+def _load_metadata(cfg):
+    """
+    Loads a metadata dataframe from a CSV file and performs the following operations:
+        - Filters by the specified organ
+        - Extracts the location and severity of hypertrophy from the 'liver_findings_microscopy' column
+        - Creates a column 'HasHypertrophy' indicating the presence of hypertrophy
+        - Creates a column 'Location' containing the location of hypertrophy
+        - Creates a column 'Severity_raw' containing the raw severity of hypertrophy
+        - Creates a column 'Severity' containing the normalized severity of hypertrophy
+
+    :param cfg: the experiment configuration
+    :return: a parsed metadata dataframe
     """
     df = pd.read_csv(cfg.data.metadata_csv)
-    df = df[df["ORGAN"].str.lower() == cfg.data.organ.lower()].copy()
+    # df = pd.read_excel(cfg.data.metadata_csv)
 
-    # hypertrophy label (binary)
-    df["HasHypertrophy"] = df["findings"].str.contains("Hypertrophy", na=False).astype(int)
+    if "ORGAN" in df.columns:
+        df = df[df["ORGAN"].str.lower() == cfg.data.organ.lower()].copy()
 
-    # extraction of Location & Severity for hypertrophy
-    loc_sev = df["findings"].apply(_extract_hypertrophy_location_severity)
-    df["Location"] = loc_sev.apply(lambda x: x[0])
-    df["Severity"] = loc_sev.apply(lambda x: x[1])
+    if "subject_organ_UID" not in df.columns and "animal_number" in df.columns:
+        df["subject_organ_UID"] = df["animal_number"].astype(str)
 
-    # Keep Location/Severity only where Hypertrophy is present
-    df["Location"] = df["Location"].where(df["HasHypertrophy"] == 1)
-    df["Severity"] = df["Severity"].where(df["HasHypertrophy"] == 1)
+    # if "slide_id" not in df.columns and "slide_filename" in df.columns:
+    #     df["slide_id"] = df["slide_filename"].astype(str)
+    if "slide_filename" in df.columns:
+        before = len(df)
+        df = df[df["slide_filename"].notna()].copy()
+        dropped = before - len(df)
+        if dropped > 0:
+            print(f"[INFO] Dropped {dropped} samples with missing slide_filename")
 
-    df["subject_organ_UID"] = df["subject_organ_UID"].astype(str)
+    # Ensure canonical slide_id exists (works for TG-GATES and UCB)
+    if "slide_id" not in df.columns:
+        if "slide_filename" in df.columns:
+            df["slide_id"] = (
+                df["slide_filename"]
+                .astype(str)
+                .apply(lambda x: Path(x).stem)
+            )
+            print("[INFO] Using 'slide_filename' as slide_id (stemmed)")
+        else:
+            raise ValueError(
+                "Metadata must contain either 'slide_id' or 'slide_filename'"
+            )
 
-    print(f"[INFO] Loaded {len(df)} samples from {cfg.data.metadata_csv} for organ {cfg.data.organ}")
+
+    parsed = df.apply(_extract_hypertrophy_location_severity, axis=1)
+
+    df["HasHypertrophy"] = parsed.apply(lambda x: x[0])
+    df["Location"] = parsed.apply(lambda x: x[1])
+    df["Severity_raw"] = parsed.apply(lambda x: x[2])
+    df["Severity"] = df["Severity_raw"].apply(_normalize_severity)
+
+    print(f"[INFO] Loaded {len(df)} samples from {cfg.data.metadata_csv}")
     return df
 
-
-# helper to select the appropriate split CSV based on config
 def _select_split_csv(cfg):
     """
-    Select the appropriate split CSV based on the pipeline configuration.
+    Select the split CSV based on the configuration.
 
-    If cfg.datasets.use_subset is True, returns the path to the subset CSV file.
-    If cfg.datasets.use_subset is False, returns the path to the full split CSV file specified by cfg.datasets.split.
+    If cfg.datasets.use_subset=True, returns the subset CSV specified in cfg.datasets.subset_csv.
+    Otherwise, returns the split CSV specified in cfg.datasets[split].
 
     Raises
     -------
     ValueError
-        If cfg.datasets.use_subset is True but cfg.datasets.subset_csv is missing.
+        If cfg.datasets.use_subset=True but cfg.datasets.subset_csv is missing.
     """
     if cfg.datasets.use_subset:
         if cfg.datasets.subset_csv:
             return cfg.datasets.subset_csv
         raise ValueError("use_subset=True but subset_csv missing")
 
-    # normal full split
     return cfg.datasets[cfg.datasets.split]
 
 
-# helper to filter by split
+# def _filter_by_split(df, split_csv, cfg):
+#     """
+#     Filters a dataframe by selecting samples based on a split CSV.
+
+#     :param df: the dataframe to filter
+#     :param split_csv: the split CSV to use for filtering
+#     :param cfg: the experiment configuration
+#     :return: a filtered dataframe
+#     """
+#     if split_csv is None:
+#         return df
+
+#     split_df = pd.read_csv(split_csv)
+#     ftype = cfg.features.feature_type
+
+#     if ftype == "animal":
+#         if "subject_organ_UID" not in split_df.columns:
+#             raise ValueError("split csv must contain 'subject_organ_UID'")
+
+#         ids = split_df["subject_organ_UID"].astype(str)
+#         return df[df["subject_organ_UID"].astype(str).isin(ids)].reset_index(drop=True)
+
+#     elif ftype == "slide":
+#         if "slide_id" not in split_df.columns:
+#             raise ValueError("split csv must contain 'slide_id'")
+
+#         ids = split_df["slide_id"].astype(str)
+#         return df[df["slide_id"].astype(str).isin(ids)].reset_index(drop=True)
+
+#     else:
+#         raise ValueError(f"Unknown feature type: {ftype}")
+
 def _filter_by_split(df, split_csv, cfg):
     """
-    Filter the dataframe by the given split CSV and feature type.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to filter.
-    split_csv : str
-        The path to the split CSV file or None.
-    cfg : omegaconf.DictConfig
-        The pipeline configuration.
-
-    Returns
-    -------
-    pd.DataFrame
-        The filtered DataFrame.
+    Filters a dataframe by selecting samples based on a split CSV.
     """
     if split_csv is None:
         return df
 
     split_df = pd.read_csv(split_csv)
-    ftype = cfg.features.feature_type  
+    ftype = cfg.features.feature_type
 
     if ftype == "animal":
-        ids = split_df["subject_organ_UID"].astype(str).tolist()
-        return df[df["subject_organ_UID"].astype(str).isin(ids)].reset_index(drop=True)
+
+        if "subject_organ_UID" not in split_df.columns:
+            if "animal_number" in split_df.columns:
+                print(
+                    "[WARN] split CSV uses 'animal_number'; "
+                    "mapping it to 'subject_organ_UID'"
+                )
+                split_df["subject_organ_UID"] = split_df["animal_number"].astype(str)
+            else:
+                raise ValueError(
+                    "split csv must contain 'subject_organ_UID' "
+                    "or alias 'animal_number'"
+                )
+
+        ids = split_df["subject_organ_UID"].astype(str)
+        return (
+            df[df["subject_organ_UID"].astype(str).isin(ids)]
+            .reset_index(drop=True)
+        )
+
+    # elif ftype == "slide":
+
+    #     if "slide_id" not in split_df.columns:
+    #         raise ValueError("split csv must contain 'slide_id'")
+
+    #     ids = split_df["slide_id"].astype(str)
+    #     return df[df["slide_id"].astype(str).isin(ids)].reset_index(drop=True)
 
     elif ftype == "slide":
-        ids = split_df["slide_id"].astype(str).tolist()
+
+        if "slide_filename" in split_df.columns:
+            before = len(split_df)
+            split_df = split_df[split_df["slide_filename"].notna()].copy()
+            dropped = before - len(split_df)
+            if dropped > 0:
+                print(
+                    f"[INFO] Dropped {dropped} split rows with missing slide_filename"
+                )
+
+        if "slide_id" not in split_df.columns:
+            if "slide_filename" in split_df.columns:
+                print(
+                    "[WARN] split CSV uses 'slide_filename'; "
+                    "mapping it to 'slide_id' (stemmed)"
+                )
+                split_df["slide_id"] = (
+                    split_df["slide_filename"]
+                    .astype(str)
+                    .apply(lambda x: Path(x).stem)
+                )
+            else:
+                raise ValueError(
+                    "split csv must contain 'slide_id' "
+                    "or alias 'slide_filename'"
+                )
+
+        ids = split_df["slide_id"].astype(str)
         return df[df["slide_id"].astype(str).isin(ids)].reset_index(drop=True)
 
+
     else:
-        raise ValueError(f"Unknown features.features_type: {ftype}")
+        raise ValueError(f"Unknown feature type: {ftype}")
 
-
-# helper to apply optional subset fraction to the filtered split
 def _apply_subset_fraction(df, cfg):
     """
-    Apply an optional subset fraction to the filtered split.
+    Apply a subset fraction to a dataframe.
 
     If cfg.datasets.use_subset=True and cfg.datasets.subset_fraction is not None,
-    this function will randomly sample a fraction of the filtered split.
+    sample a fraction of the dataframe and return it.
+    Otherwise, return the original dataframe.
 
-    The random_state parameter is set to 42 for reproducibility.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The dataframe to sample from.
+    cfg : omegaconf.DictConfig
+        The configuration dictionary.
 
-    Parameters:
-    - df (pd.DataFrame): The DataFrame to sample from.
-    - cfg (OmegaConf): The pipeline configuration.
-
-    Returns:
-    - pd.DataFrame: The sampled DataFrame if cfg.datasets.use_subset=True and
-      cfg.datasets.subset_fraction is not None, otherwise the original DataFrame.
+    Returns
+    -------
+    pandas.DataFrame
+        The sampled dataframe.
     """
     if cfg.datasets.use_subset and cfg.datasets.subset_fraction is not None:
         return df.sample(frac=cfg.datasets.subset_fraction, random_state=42).reset_index(drop=True)
     return df.reset_index(drop=True)
 
 
-# helper to select feature directories based on config
 def _select_feature_dirs(cfg):
     """
     Select feature directories based on config.
 
-    Returns a dictionary with the following keys:
-        "raw_slide_dir": Path to the raw slide feature directory
-        "slide_dir": Path to the processed slide feature directory
-        "animal_dir": Path to the processed animal feature directory
-
-    Parameters:
-    - cfg (OmegaConf): The pipeline configuration
-
-    Returns:
-    - dict: A dictionary with the selected feature directories
+    Always returns a single raw_slide_dir.
+    Cached dirs may or may not be used downstream.
     """
     return {
         "raw_slide_dir": Path(cfg.data.raw_slide_dir),
-        "slide_dir":     Path(cfg.data.slide_dir),
-        "animal_dir":    Path(cfg.data.animal_dir),
+        "slide_dir": Path(cfg.data.slide_dir),
+        "animal_dir": Path(cfg.data.animal_dir),
     }
 
-# main function to prepare dataset inputs, called from train.py and eval.py
+
+
 def prepare_dataset_inputs(cfg):
     """
-    Prepare dataset inputs for training, evaluation, and downstream processing.
+    Prepare input data for training or evaluation.
 
-    Parameters:
-    - cfg (OmegaConf): The pipeline configuration.
+    Returns a dictionary containing:
+      - 'data': a dictionary containing:
+          - 'df': the filtered metadata dataframe
+          - 'ids': a list of slide or animal IDs
+          - 'labels': a list of labels (HasHypertrophy)
+          - 'num_classes': the number of classes
+          - 'severity': a list of severity labels
+          - 'location': a list of location labels
+          - 'raw_slide_dir', 'slide_dir', 'animal_dir': raw, processed slide and animal feature directories
+          - 'features_dir': the feature directory to use (slide or animal)
+          - 'split', 'subset_csv', 'train_csv', 'val_csv', 'test_csv': dataset split information
+      - 'runtime': a dictionary containing:
+          - 'batch_size', 'epochs', 'lr', 'optimizer', 'weight_decay', 'momentum', 'loss', 'device', 'num_workers': runtime hyperparameters
+      - 'probe': a dictionary containing:
+          - 'type', 'hidden_dim', 'num_layers', 'knn_neighbors': probe hyperparameters
 
-    Returns:
-    - dict: A dictionary containing the prepared dataset, runtime options, and probe options.
+    :param cfg: the experiment configuration
+    :return: a dictionary containing input data and hyperparameters
     """
     df = _load_metadata(cfg)
 
@@ -199,10 +370,8 @@ def prepare_dataset_inputs(cfg):
     df = _apply_subset_fraction(df, cfg)
 
     dirs = _select_feature_dirs(cfg)
-
     ftype = cfg.features.feature_type
 
-    # create list of IDs and labels based on feature type (slide vs animal)
     if ftype == "animal":
         ids = df["subject_organ_UID"].astype(str).tolist()
         features_dir = dirs["animal_dir"]
@@ -212,7 +381,6 @@ def prepare_dataset_inputs(cfg):
 
     labels = df["HasHypertrophy"].tolist()
 
-    # final prepared data dictionary with all necessary info for downstream processing, training, and evaluation
     return {
         "data": {
             "df": df,
@@ -221,20 +389,20 @@ def prepare_dataset_inputs(cfg):
             "num_classes": len(set(labels)),
             "severity": df["Severity"].tolist(),
             "location": df["Location"].tolist(),
+            "dataset": cfg.datasets.name,
 
-            # DIRS
+            # directories
             "raw_slide_dir": dirs["raw_slide_dir"],
-            "slide_dir":     dirs["slide_dir"],
-            "animal_dir":    dirs["animal_dir"],
-
+            "slide_dir": dirs["slide_dir"],
+            "animal_dir": dirs["animal_dir"],
             "features_dir": features_dir,
 
             # meta
             "split": cfg.datasets.split,
             "subset_csv": cfg.datasets.subset_csv if cfg.datasets.use_subset else None,
             "train_csv": cfg.datasets.train,
-            "val_csv":   cfg.datasets.val,
-            "test_csv":  cfg.datasets.test,
+            "val_csv": cfg.datasets.val,
+            "test_csv": cfg.datasets.test,
 
             # feature options
             "aggregate": cfg.aggregation.type,
@@ -261,5 +429,5 @@ def prepare_dataset_inputs(cfg):
             "hidden_dim": cfg.probe.hidden_dim,
             "num_layers": cfg.probe.num_layers,
             "knn_neighbors": cfg.probe.knn_neighbors,
-        }
+        },
     }

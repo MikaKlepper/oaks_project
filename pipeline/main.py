@@ -12,41 +12,34 @@ from logger import setup_logger
 from omegaconf import OmegaConf
 
 
-def write_config(cfg, out_dir: Path) -> Path:
-    """
-    Write the given config to a file in the specified directory.
+TEST_ONLY_DATASETS = {"ucb"}
+REAL_STAGES = {"train", "eval", "test"}
 
-    Args:
-        cfg: The config to write
-        out_dir: The directory to write the config to
 
-    Returns:
-        The path to the written config file
-    """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "config.yaml"
-    OmegaConf.save(cfg, path)
-    return path
+def resolve_stages(requested_stage: str, dataset: str):
+    if requested_stage == "all":
+        if dataset in TEST_ONLY_DATASETS:
+            return ["test"]
+        # return ["train", "eval", "test"]
+        return ["train", "eval"]
+    return [requested_stage]
 
 
 def run_stage(stage: str, args, exp_root: Path):
-    """
-    Run the specified stage of the pipeline.
+    assert stage in REAL_STAGES
 
-    Args:
-        stage: The stage to run (train, eval, test)
-        args: The parsed command line arguments
-        exp_root: The root directory of the experiment
+    # IMPORTANT: copy args first, then override stage
+    stage_args = SimpleNamespace(**vars(args))
+    stage_args.stage = stage
 
-    Runs the specified stage by generating a stage-specific config, writing it to a file, and then invoking the corresponding stage's script with the generated config.
-
-    Note: This function will block until the specified stage has finished running. If the stage fails, this function will raise a CalledProcessError.
-    """
-    stage_args = SimpleNamespace(**{**vars(args), "stage": stage})
     cfg = load_merged_config(args.config, stage_args)
 
     cfg.stage = stage
-    cfg_path = write_config(cfg, exp_root / stage)
+    out_dir = exp_root / stage
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cfg_path = out_dir / "config.yaml"
+    OmegaConf.save(cfg, cfg_path)
 
     script = "train.py" if stage == "train" else "eval.py"
     cmd = [sys.executable, script, "--config", str(cfg_path)]
@@ -57,26 +50,26 @@ def run_stage(stage: str, args, exp_root: Path):
 
 def main():
     args = get_args()
+    assert args.stage in REAL_STAGES | {"all"}
 
-    # Determine experiment root once
-    cfg = load_merged_config(args.config, args)
-    exp_root = Path(cfg.experiment_root)
+    # --- Preview config (all is orchestration only) ---
+    preview_stage = "test" if args.stage == "all" else args.stage
+    preview_args = SimpleNamespace(**vars(args))
+    preview_args.stage = preview_stage
+
+    cfg_preview = load_merged_config(args.config, preview_args)
+    dataset = cfg_preview.datasets.name
+    exp_root = Path(cfg_preview.experiment_root)
 
     setup_logger(exp_root)
+
+    stages = resolve_stages(args.stage, dataset)
+
     logging.info("========== MAIN ==========")
-    logging.info(f"[MAIN] Requested stage: {args.stage}")
+    logging.info(f"[MAIN] Dataset: {dataset}")
+    logging.info(f"[MAIN] Stages to run: {stages}")
 
-    # Decide which stages to run
-    if args.stage == "all":
-        # stages = ["train", "eval", "test"]
-        stages = ["train", "eval"]
-    else:
-        stages = [args.stage]
-
-    valid = {"train", "eval", "test"}
     for stage in stages:
-        if stage not in valid:
-            raise ValueError(f"Unknown stage: {stage}")
         run_stage(stage, args, exp_root)
 
 

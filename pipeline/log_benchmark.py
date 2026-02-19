@@ -8,21 +8,25 @@ def log_benchmark(cfg, metrics):
     """
     Logs benchmark results into:
 
-        outputs/<stage>/<aggregation>_benchmark_results.csv
+        outputs/<stage>/<dataset>/<aggregation>_benchmark_results.csv
 
     Stage:
       - eval -> validation benchmarks
       - test -> final test benchmarks
     """
 
+    dataset = cfg.datasets.name
+
     benchmark_file = (
         Path("outputs")
         / cfg.stage
+        / dataset
         / f"{cfg.aggregation.type}_benchmark_results.csv"
     )
     benchmark_file.parent.mkdir(parents=True, exist_ok=True)
 
     new_row = {
+        "dataset": dataset,                     
         "encoder": cfg.features.encoder,
         "probe": cfg.probe.type,
         "k_shot": cfg.fewshot.k,
@@ -35,16 +39,16 @@ def log_benchmark(cfg, metrics):
         "roc_auc": metrics["roc_auc"],
     }
 
-    # If benchmark file doesn't exist, create it with the new row
     if not benchmark_file.exists():
         pd.DataFrame([new_row]).to_csv(benchmark_file, index=False)
-        print(f"[Benchmark] Created → {benchmark_file}")
+        print(f"[Benchmark] Created -> {benchmark_file}")
         return
 
     df = pd.read_csv(benchmark_file)
 
-    # check if there's already an entry for the same encoder, probe, k_shot, and feature_type
+
     same_exp = (
+        (df["dataset"] == new_row["dataset"]) &
         (df["encoder"] == new_row["encoder"]) &
         (df["probe"] == new_row["probe"]) &
         (df["k_shot"] == new_row["k_shot"]) &
@@ -53,7 +57,6 @@ def log_benchmark(cfg, metrics):
 
     matches = df.index[same_exp]
 
-    # if there's already an entry, update it; otherwise, append a new row
     if len(matches) > 0:
         df.loc[matches[0]] = new_row
         print(f"[Benchmark] Updated existing {cfg.stage} result")
@@ -62,4 +65,4 @@ def log_benchmark(cfg, metrics):
         print(f"[Benchmark] Added new {cfg.stage} result")
 
     df.to_csv(benchmark_file, index=False)
-    print(f"[Benchmark] Saved → {benchmark_file}")
+    print(f"[Benchmark] Saved -> {benchmark_file}")

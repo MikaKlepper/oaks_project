@@ -55,6 +55,8 @@ def get_args():
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--device", type=str)
 
+    parser.add_argument("--dataset", type=str, default=None, choices=["tggates", "ucb"], help="Dataset to use")
+
     # # Checkpoint for eval
     # parser.add_argument("--model_path", type=str, default=None)
 

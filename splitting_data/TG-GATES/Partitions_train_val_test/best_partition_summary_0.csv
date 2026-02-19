@@ -1,0 +1,16 @@
+Label,Count_A,Count_B,Difference
+hyp_0,11301,11296,5
+hyp_1,548,566,18
+loc_Bile duct cell,0,10,10
+"loc_Bile duct, interlobular",36,0,36
+loc_Centrilobular,423,420,3
+loc_Hepatocyte,75,84,9
+loc_Ito cell,0,38,38
+loc_Kupffer cell,4,3,1
+loc_Midlobular,5,0,5
+loc_Peripheral,2,11,9
+loc_Periportal,3,0,3
+sev_minimal,220,222,2
+sev_moderate,73,84,11
+sev_severe,12,10,2
+sev_slight,243,250,7

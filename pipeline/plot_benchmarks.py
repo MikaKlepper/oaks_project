@@ -5,17 +5,30 @@ import matplotlib as mpl
 import seaborn as sns
 
 
-# prettify function
+# encoders
+ENCODER_ORDER = [
+    "CONCH",
+    "H_OPTIMUS_0",
+    "H_OPTIMUS_1",
+    "UNI",
+    "UNI_2",
+    "VIRCHOW2",
+    "KAIKO",
+    "PHIKON",
+    "PHIKON_V2",
+    "MIDNIGHT12K",
+    "PRISM",
+    "RESNET50",
+    "HIBOU_B",
+    "HIBOU_L",
+    "PROV_GIGAPATH_224_SLIDE",
+    "PROV_GIGAPATH_256_SLIDE",
+    "PROV_GIGAPATH_224_TILE",
+    "PROV_GIGAPATH_256_TILE",
+]
+
+# pretty names for encoders (for plots)
 def prettify(name: str) -> str:
-    """
-    Maps a foundation model name to a human-readable string for plotting.
-
-    Args:
-        name: str, the foundation model name to map.
-
-    Returns:
-        str, the human-readable name for plotting.
-    """
     mapping = {
         "H_OPTIMUS_1": "H-Optimus-1",
         "H_OPTIMUS_0": "H-Optimus-0",
@@ -38,7 +51,7 @@ def prettify(name: str) -> str:
     return mapping.get(name, name.replace("_", "-"))
 
 
-# seaborn / matplotlib style settings
+# general style
 sns.set_theme(style="whitegrid", font_scale=1.25)
 
 mpl.rcParams.update({
@@ -49,24 +62,24 @@ mpl.rcParams.update({
     "grid.alpha": 0.2,
 })
 
+# heatmap style
+HEATMAP_CMAP = sns.color_palette("Blues", as_cmap=True)
+HEATMAP_VMIN = 0.50
+HEATMAP_VMAX = 1.00
 
-# encoder style maps
+
+
 def _get_encoder_style_maps(encoders):
     """
-    Maps each encoder name to a color and marker style for plotting.
-
-    Parameters:
-        encoders (list[str]): a list of encoder names
-
-    Returns:
-        tuple[dict[str, str], dict[str, str]]: a tuple of two dictionaries, where the first dictionary maps each encoder name to a color, and the second dictionary maps each encoder name to a marker style.
+    Returns a tuple of two dictionaries: color_map and marker_map.
+    color_map maps each encoder to a color for plotting.
+    marker_map maps each encoder to a marker style for plotting.
     """
     colors = (
         list(plt.get_cmap("tab20").colors)
         + list(plt.get_cmap("tab20b").colors)
         + list(plt.get_cmap("tab20c").colors)
     )
-
     markers = ["o", "s", "^", "D", "P", "X", "*", "v"]
 
     color_map = {}
@@ -79,26 +92,34 @@ def _get_encoder_style_maps(encoders):
     return color_map, marker_map
 
 
-# learning curve plotting
+
 def plot_learning_curve(df, out_dir: Path, agg: str):
     """
-    Plots the learning curve for each probe, with each encoder represented by a different color and marker style.
+    Plots a learning curve for each probe in the dataframe.
 
-    Parameters:
-        df (pandas.DataFrame): the input dataframe containing the results of the benchmark
-        out_dir (Path): the directory where the plot will be saved
-        agg (str): the type of aggregation used for the benchmark (e.g., "mean", "median")
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe containing the results of the experiment.
+    out_dir : Path
+        Output directory for the plot.
+    agg : str
+        String indicating the aggregation method used (e.g. "mean", "max","min", "mil").
 
-    Returns:
-        None
+    Notes
+    ----
+    Each probe is plotted in a separate figure. For each encoder, the ROC-AUC
+    is plotted against the k-shot value. The best ROC-AUC across all encoders
+    is also plotted as a black line.
 
-    Notes:
-        The plot will be saved as a PNG file in the specified output directory, with the filename in the format {agg}_learning_curve_{probe}.png
+    The x-axis is log-scaled.
+
+    The plot is saved as a PNG file in the output directory.
     """
     df = df.sort_values("k_shot")
     df["pretty_encoder"] = df["encoder"].apply(prettify)
 
-    encoders = sorted(df["encoder"].unique())
+    encoders = [e for e in ENCODER_ORDER if e in df["encoder"].unique()]
     probes = sorted(df["probe"].unique())
 
     color_map, marker_map = _get_encoder_style_maps(encoders)
@@ -113,8 +134,6 @@ def plot_learning_curve(df, out_dir: Path, agg: str):
             if df_enc.empty:
                 continue
 
-            df_enc = df_enc.sort_values("k_shot")
-
             plt.plot(
                 df_enc["k_shot"],
                 df_enc["roc_auc"],
@@ -126,7 +145,6 @@ def plot_learning_curve(df, out_dir: Path, agg: str):
                 label=prettify(enc),
             )
 
-        # Best per k-shot
         df_best = (
             df_probe
             .loc[df_probe.groupby("k_shot")["roc_auc"].idxmax()]
@@ -145,52 +163,32 @@ def plot_learning_curve(df, out_dir: Path, agg: str):
             zorder=5,
         )
 
-        for _, row in df_best.iterrows():
-            plt.annotate(
-                prettify(row["encoder"]),
-                xy=(row["k_shot"], row["roc_auc"]),
-                xytext=(0, 12),
-                textcoords="offset points",
-                fontsize=10,
-                fontweight="bold",
-                ha="center",
-                bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.75),
-                arrowprops=dict(arrowstyle="->", lw=0.8, alpha=0.6),
-            )
-
         plt.xscale("log")
-        k_vals = sorted(df_probe["k_shot"].unique())
-        plt.xticks(k_vals, k_vals, fontsize=11)
-
-        plt.xlabel("k-shot", fontsize=14)
-        plt.ylabel("ROC-AUC", fontsize=14)
-        plt.title(f"{agg.upper()} aggregation — Probe: {probe}", fontsize=20)
+        plt.xticks(sorted(df_probe["k_shot"].unique()))
+        plt.xlabel("k-shot")
+        plt.ylabel("ROC-AUC")
+        plt.title(f"{agg.upper()} aggregation — Probe: {probe}")
         plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
         outfile = out_dir / f"{agg}_learning_curve_{probe}.png"
         plt.tight_layout()
         plt.savefig(outfile, dpi=300)
         plt.close()
-        print(f"[PNG] Saved → {outfile}")
 
 
-# tables of best results
+
+
 def generate_best_tables(df, out_dir: Path, agg: str):
     """
-    Generates two tables of best results for each probe.
-
-    The first table contains the best result for each probe per k-shot, while the second table contains the best result for each probe overall (across all k-shots).
+    Generates two CSV files containing the best performing probes per k-shot and over all k-shots.
 
     Parameters:
-        df (pandas.DataFrame): the input dataframe containing the results of the benchmark
-        out_dir (Path): the directory where the tables will be saved
-        agg (str): the type of aggregation used for the benchmark (e.g., "mean", "median")
+    df (pandas.DataFrame): DataFrame containing the results of the benchmark.
+    out_dir (Path): Directory where the CSV files will be saved.
+    agg (str): Aggregation method used in the benchmark (e.g. "mean", "mil").
 
     Returns:
-        None
-
-    Notes:
-        The tables will be saved as two CSV files in the specified output directory, with the filenames in the format {agg}_best_per_probe_per_k.csv and {agg}_best_per_probe_overall.csv
+    None
     """
     best_per_k = df.loc[df.groupby(["probe", "k_shot"])["roc_auc"].idxmax()]
     best_overall = df.loc[df.groupby("probe")["roc_auc"].idxmax()]
@@ -198,30 +196,28 @@ def generate_best_tables(df, out_dir: Path, agg: str):
     best_per_k.to_csv(out_dir / f"{agg}_best_per_probe_per_k.csv", index=False)
     best_overall.to_csv(out_dir / f"{agg}_best_per_probe_overall.csv", index=False)
 
-    print("[CSV] Saved best tables")
 
-
-# heatmap generation
 def generate_heatmaps(df, out_dir: Path, agg: str):
     """
-    Generates a heatmap for each k-shot value and an overall mean heatmap.
+    Generate heatmaps for each k-shot and the mean ROC-AUC over all k-shots.
 
-    Parameters:
-        df (pandas.DataFrame): the input dataframe containing the results of the benchmark
-        out_dir (Path): the directory where the heatmaps will be saved
-        agg (str): the type of aggregation used for the benchmark (e.g., "mean", "median")
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe containing the results of the benchmark.
+    out_dir : Path
+        Directory where the heatmaps will be saved.
+    agg : str
+        Aggregation method used to generate the results.
 
-    Returns:
-        None
-
-    Notes:
-        The heatmaps will be saved as PNG files in the specified output directory, with the filenames in the format {agg}_heatmap_k{k}.png and {agg}_heatmap_mean.png
+    Returns
+    -------
+    None
     """
-    k_values = sorted(df["k_shot"].unique())
-
-    for k in k_values:
+    for k in sorted(df["k_shot"].unique()):
         df_k = df[df["k_shot"] == k]
         matrix = df_k.pivot(index="encoder", columns="probe", values="roc_auc")
+        matrix = matrix.loc[[e for e in ENCODER_ORDER if e in matrix.index]]
         matrix.rename(index=prettify, inplace=True)
 
         plt.figure(figsize=(16, 10))
@@ -229,24 +225,20 @@ def generate_heatmaps(df, out_dir: Path, agg: str):
             matrix,
             annot=True,
             fmt=".2f",
-            cmap=sns.color_palette("Blues", as_cmap=True),
+            cmap=HEATMAP_CMAP,
+            vmin=HEATMAP_VMIN,
+            vmax=HEATMAP_VMAX,
             linewidths=0.5,
             cbar_kws={"label": "ROC-AUC"},
-            vmin=0.50,
-            vmax=1.00,
         )
-
-        plt.title(f"{agg.upper()} aggregation — k={k}", fontsize=18)
+        plt.title(f"{agg.upper()} aggregation — k={k}")
         plt.tight_layout()
-
-        out_k = out_dir / f"{agg}_heatmap_k{k}.png"
-        plt.savefig(out_k, dpi=300)
+        plt.savefig(out_dir / f"{agg}_heatmap_k{k}.png", dpi=300)
         plt.close()
-        print(f"[Heatmap] Saved → {out_k}")
 
-    # Mean heatmap
     df_avg = df.groupby(["encoder", "probe"])["roc_auc"].mean().reset_index()
     matrix = df_avg.pivot(index="encoder", columns="probe", values="roc_auc")
+    matrix = matrix.loc[[e for e in ENCODER_ORDER if e in matrix.index]]
     matrix.rename(index=prettify, inplace=True)
 
     plt.figure(figsize=(16, 10))
@@ -254,114 +246,108 @@ def generate_heatmaps(df, out_dir: Path, agg: str):
         matrix,
         annot=True,
         fmt=".2f",
-        cmap=sns.color_palette("Blues", as_cmap=True),
+        cmap=HEATMAP_CMAP,
+        vmin=HEATMAP_VMIN,
+        vmax=HEATMAP_VMAX,
         linewidths=0.5,
         cbar_kws={"label": "Mean ROC-AUC"},
-        vmin=0.50,
-        vmax=1.00,
     )
-
-    plt.title(f"{agg.upper()} aggregation — Mean ROC-AUC", fontsize=18)
+    plt.title(f"{agg.upper()} aggregation — Mean ROC-AUC")
     plt.tight_layout()
-
-    out = out_dir / f"{agg}_heatmap_mean.png"
-    plt.savefig(out, dpi=300)
+    plt.savefig(out_dir / f"{agg}_heatmap_mean.png", dpi=300)
     plt.close()
-    print(f"[Heatmap] Saved → {out}")
 
 
-# main function to run all plots
-def run_all_plots(agg: str, stage: str):
+def run_all_plots(agg: str, stage: str, dataset: str):
     """
-    Generate all plots and tables for a given aggregation and stage.
+    Plots all relevant figures for the given aggregation.
 
-    Args:
-        agg   : aggregation type (mean, max, min)
-        stage : 'eval' or 'test'
+    Parameters
+    ----------
+    agg : str
+        Aggregation type (e.g. "min", "mean", "max")
+    stage : str
+        Stage of the benchmark (e.g. "eval", "test")
+    dataset : str
+        Dataset name (e.g. "ucb")
+
+    Returns
+    -------
+    None
     """
-    benchmark_file = Path("outputs") / stage / f"{agg}_benchmark_results.csv"
+    benchmark_file = Path("outputs") / stage / dataset / f"{agg}_benchmark_results.csv"
     if not benchmark_file.exists():
         print(f"[ERROR] Missing benchmark file: {benchmark_file}")
         return
 
     df = pd.read_csv(benchmark_file)
-
-    out_dir = Path("outputs") / stage / agg
+    out_dir = Path("outputs") / stage / dataset / agg
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"[INFO] Loaded {len(df)} rows from → {benchmark_file}")
 
     plot_learning_curve(df, out_dir, agg)
     generate_best_tables(df, out_dir, agg)
     generate_heatmaps(df, out_dir, agg)
 
-    print(f"[DONE] All plots saved under -> {out_dir}")
 
-
-def combine_mil_and_mean(stage: str, out_name: str = "combined_benchmark_results.csv"):
+def combine_mil_and_mean(stage: str, dataset: str):
     """
-    Combine MIL and mean benchmark CSVs into a single CSV.
+    Combines the mean and MIL benchmark results into a single CSV file.
 
-    Args:
-        stage (str): 'eval' or 'test'
-        out_name (str): name of the combined output CSV
+    The file is saved to "outputs/<stage>/<dataset>/combined_benchmark_results.csv".
+
+    Parameters
+    ----------
+    stage : str
+        Stage of the benchmark (e.g. "eval", "test")
+    dataset : str
+        Dataset name (e.g. "ucb")
+
+    Returns
+    -------
+    None
     """
-    base_dir = Path("outputs") / stage
-
+    base_dir = Path("outputs") / stage / dataset
     mean_file = base_dir / "mean_benchmark_results.csv"
     mil_file = base_dir / "MIL_benchmark_results.csv"
 
     dfs = []
-
     if mean_file.exists():
-        df_mean = pd.read_csv(mean_file)
-        df_mean["agg"] = "mean"
-        dfs.append(df_mean)
-    else:
-        print(f"[WARN] Missing file: {mean_file}")
-
+        df = pd.read_csv(mean_file)
+        df["agg"] = "mean"
+        dfs.append(df)
     if mil_file.exists():
-        df_mil = pd.read_csv(mil_file)
-        df_mil["agg"] = "MIL"
-        dfs.append(df_mil)
-    else:
-        print(f"[WARN] Missing file: {mil_file}")
+        df = pd.read_csv(mil_file)
+        df["agg"] = "MIL"
+        dfs.append(df)
 
-    if not dfs:
-        print("[ERROR] No benchmark files found to combine.")
-        return
-
-    df_combined = pd.concat(dfs, ignore_index=True)
-
-    out_path = base_dir / out_name
-    df_combined.to_csv(out_path, index=False)
-
-    print(f"[CSV] Combined benchmark saved → {out_path}")
+    if dfs:
+        pd.concat(dfs).to_csv(base_dir / "combined_benchmark_results.csv", index=False)
 
 
-def run_all_plots_combined(stage: str):
+def run_all_plots_combined(stage: str, dataset: str):
     """
-    Generate all benchmark plots treating MIL probes (abmil, clam)
-    as regular probes, using the combined benchmark CSV.
+    Runs all plots (learning curve, best tables, and heatmaps) for the combined
+    mean and MIL benchmark results.
+
+    Parameters
+    ----------
+    stage : str
+        Stage of the benchmark (e.g. "eval", "test")
+    dataset : str
+        Dataset name (e.g. "ucb")
+
+    Returns
+    -------
+    None
     """
-    combined_file = Path("outputs") / stage / "combined_benchmark_results.csv"
+    combined_file = Path("outputs") / stage / dataset / "combined_benchmark_results.csv"
     if not combined_file.exists():
-        print(f"[ERROR] Missing combined benchmark file: {combined_file}")
         return
 
-    df = pd.read_csv(combined_file)
-
-    if "agg" in df.columns:
-        df = df.drop(columns=["agg"])
-
-    out_dir = Path("outputs") / stage / "combined"
+    df = pd.read_csv(combined_file).drop(columns=["agg"], errors="ignore")
+    out_dir = Path("outputs") / stage / dataset / "combined"
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"[INFO] Loaded {len(df)} rows from → {combined_file}")
-    print("[INFO] Generating unified plots across ALL probes (incl. MIL)")
 
     plot_learning_curve(df, out_dir, agg="combined")
     generate_best_tables(df, out_dir, agg="combined")
     generate_heatmaps(df, out_dir, agg="combined")
-
-    print(f"[DONE] Unified benchmark plots saved under -> {out_dir}")

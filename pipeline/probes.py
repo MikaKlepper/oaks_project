@@ -288,6 +288,9 @@ class MILTorchProbe(TorchProbe):
     """
 
     def fit(self, dataset, collate_fn=None):
+        """
+        Train the MIL probe on the given dataset.
+        """
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
@@ -359,6 +362,9 @@ class MILTorchProbe(TorchProbe):
             logging.info(f"[MILTorchProbe] Restored best model (loss={best_loss:.4f})")
 
     def predict(self, dataset, collate_fn=None):
+        """
+        Predict classes for the given dataset.
+        """
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
@@ -383,6 +389,8 @@ class MILTorchProbe(TorchProbe):
         return torch.cat(preds).numpy()
 
     def predict_proba(self, dataset, collate_fn=None):
+        """Predict class probabilities for the given dataset.
+        """
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
@@ -436,14 +444,42 @@ class SklearnProbe(BaseProbe):
 
 
 def default_probe_path(prepared, exp_root, is_torch=True):
+    """
+    Return the default path for a probe model checkpoint.
+
+    Parameters
+    ----------
+    prepared : dict
+        Parsed config containing probe and runtime information.
+    exp_root : str
+        Root directory of the experiment.
+    is_torch : bool, optional
+        Whether the probe model is a PyTorch model (default: True).
+
+    Returns
+    -------
+    Path
+        Default path for the probe model checkpoint.
+    """
     suffix = ".pt" if is_torch else ".joblib"
-    probe_type = prepared["probe"]["type"]
+    probe_type = prepared["probe"]["type"].lower()
     ckpt_dir = Path(exp_root) / "train"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     return ckpt_dir / f"probe_{probe_type}{suffix}"
 
 
 def build_probe(prepared, input_dim: int, num_classes: int):
+    """
+    Build a probe model based on the prepared config.
+
+    Args:
+        prepared (dict): Parsed config containing probe and runtime information.
+        input_dim (int): Number of input features.
+        num_classes (int): Number of output classes.
+
+    Returns:
+        TorchProbe or SklearnProbe: A probe model with the specified architecture and config.
+    """
     p = prepared["probe"]
     r = prepared["runtime"]
 

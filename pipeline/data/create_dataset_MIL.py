@@ -7,29 +7,25 @@ from data.process_slide_features import load_raw_features
 
 class ToxicologyMILDataset(Dataset):
     """
-    Multiple Instance Learning (MIL) dataset.
-
-    One sample = one bag of tile embeddings (N, D) + one label.
-
-    - Slide-level MIL:
-        one slide → one bag of tiles
-    - Animal-level MIL:
-        one animal → multiple slides → concatenated tile bags
-
-    Notes
-    -----
-    - Uses raw (tile-level) slide features
-    - Padding & masks handled by collate_mil
-    - Bag-level caching is enabled automatically for small datasets (e.g. k ≤ 100)
+    A PyTorch Dataset for Multiple Instance Learning (MIL) on toxicology data.
+    Each sample corresponds to a "bag" of tiles (features) from one or more slides,
+    with a single label per bag.
+    The dataset supports both slide-level and animal-level features, depending on the configuration.
+    Caching Strategy:
+      - For small datasets (<=600 samples), bags are cached in memory after first load.
+      - For larger datasets, no caching is used to avoid memory issues.
     """
 
     def __init__(self, prepared):
+        
         data = prepared["data"]
         df = data["df"]
 
         self.ids = list(data["ids"])
         self.labels = list(data["labels"])
-        self.raw_slide_dir = Path(data["raw_slide_dir"])
+
+        self.raw_slide_dir = [data["raw_slide_dir"]]
+
         self.embed_dim = int(data["embed_dim"])
 
         self.severity = list(data.get("severity", [None] * len(self.ids)))
@@ -49,22 +45,31 @@ class ToxicologyMILDataset(Dataset):
         else:
             raise ValueError("features_type must be 'slide' or 'animal'")
 
-        # Enable bag caching for small datasets to speed up training (at the cost of memory)
         self.use_bag_cache = len(self.ids) <= 600
         self.bag_cache = {} if self.use_bag_cache else None
 
-        if self.use_bag_cache:
-            print(f"[MIL Dataset] Bag caching ENABLED ({len(self.ids)} samples)")
-        else:
-            print(f"[MIL Dataset] Bag caching DISABLED ({len(self.ids)} samples)")
+        print(
+            f"[MIL Dataset] Bag caching "
+            f"{'ENABLED' if self.use_bag_cache else 'DISABLED'} "
+            f"({len(self.ids)} samples)"
+        )
 
     def __len__(self):
         return len(self.ids)
 
+    def _load_slide(self, slide_id):
+        """
+        Try all raw feature directories for a slide.
+        """
+        for d in self.raw_slide_dir:
+            path = d / f"{slide_id}.pt"
+            if path.exists():
+                return load_raw_features(path)
+        return None
+
     def __getitem__(self, idx):
         sample_id = self.ids[idx]
 
-        # Use cached bag if it exists and caching is enabled
         if self.use_bag_cache and sample_id in self.bag_cache:
             bag = self.bag_cache[sample_id]
             label = torch.tensor(self.labels[idx], dtype=torch.long)
@@ -74,16 +79,18 @@ class ToxicologyMILDataset(Dataset):
         tiles = []
 
         for sid in slide_ids:
-            path = self.raw_slide_dir / f"{sid}.pt"
-            if path.exists():
-                tiles.append(load_raw_features(path))
+            feats = self._load_slide(sid)
+            if feats is not None:
+                tiles.append(feats)
 
         if len(tiles) == 0:
-            raise RuntimeError(f"No tiles found for sample {sample_id}")
+            raise RuntimeError(
+                f"[MIL] No tiles found for sample {sample_id} "
+                f"(searched {len(self.raw_slide_dir)} dirs)"
+            )
 
         bag = torch.cat(tiles, dim=0)
 
-        # Cache the bag for future use if caching is enabled
         if self.use_bag_cache:
             self.bag_cache[sample_id] = bag
 
