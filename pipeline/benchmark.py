@@ -33,6 +33,7 @@ ENCODERS = [
     "PROV_GIGAPATH_224_TILE",
     "PROV_GIGAPATH_256_TILE",
 ]
+# ENCODERS =["H_OPTIMUS_1"]  # for quick testing, focus on one encoder]
 
 PROBES = [
     "linear",
@@ -47,10 +48,12 @@ PROBES = [
 ]
 
 K_VALUES = [100, 80, 40, 20, 10, 5, 1]
-AGGREGATION_METHODS = ["mean"]
+# K_VALUES =[2953]  # for quick testing, use all training samples for tggates
+# AGGREGATION_METHODS = ["mean","max","min"]
+AGGREGATION_METHODS = ["mean","max","min"]
 MIL_PROBES = {"abmil", "clam", "dsmil"}
 TEST_ENCODERS = {"H_OPTIMUS_1"}
-TEST_K_VALUES = {100}
+TEST_K_VALUES = {100}  # 2953 = all training samples for tggates
 TEST_NON_MIL_AGGS = {"mean"}
 EPOCHS = 100
 

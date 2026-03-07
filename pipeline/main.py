@@ -20,8 +20,7 @@ def resolve_stages(requested_stage: str, dataset: str):
     if requested_stage == "all":
         if dataset in TEST_ONLY_DATASETS:
             return ["test"]
-        # return ["train", "eval", "test"]
-        return ["train", "eval"]
+        return ["train", "eval"] # test will be done in benchmark.py, so we skip it here
     return [requested_stage]
 
 
@@ -52,7 +51,7 @@ def main():
     args = get_args()
     assert args.stage in REAL_STAGES | {"all"}
 
-    # --- Preview config (all is orchestration only) ---
+    # preview the stages that would be run for the given dataset and stage argument combination
     preview_stage = "test" if args.stage == "all" else args.stage
     preview_args = SimpleNamespace(**vars(args))
     preview_args.stage = preview_stage
@@ -63,7 +62,7 @@ def main():
 
     setup_logger(exp_root)
 
-    stages = resolve_stages(args.stage, dataset)
+    stages = resolve_stages(args.stage, dataset) # ["train", "eval", "test"]
 
     logging.info("========== MAIN ==========")
     logging.info(f"[MAIN] Dataset: {dataset}")

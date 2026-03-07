@@ -36,15 +36,7 @@ TEST_ONLY_DATASETS = {"ucb"}
 ENCODERS =["H_OPTIMUS_1"]  # for quick testing, focus on one encoder]
 
 PROBES = [
-    "linear",
-    "mlp",
-    "logreg",
-    "knn",
-    "svm_linear",
-    "svm_rbf",
-    "abmil",
     "clam",
-    "dsmil",
 ]
 # K_VALUES = [100, 80, 40, 20, 10, 5, 1]
 K_VALUES =[2953]  # for quick testing, use all training samples for tggates

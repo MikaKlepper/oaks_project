@@ -3,7 +3,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-file = Path("/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/mean_benchmark_results_without_full_train.csv")
+# file = Path("/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/mean_benchmark_results_without_full_train.csv")
+file = Path("/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/tggates/combined_benchmark_results_without_full_training.csv")
 
 df = pd.read_csv(file)
 

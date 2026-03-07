@@ -18,6 +18,27 @@ from sklearn.svm import SVC
 from torchmil.models import ABMIL
 from torchmil.models import CLAM_SB as CLAM
 from torchmil.models import DSMIL
+import os
+import random
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 
 class BaseProbe:
@@ -81,8 +102,11 @@ class TorchProbeConfig:
     momentum: float
     loss: str
     num_workers: int = 4
-    patience: int = 10
+    patience: int = 3
     rel_tolerance: float = 0.01
+    max_mil_epochs = 15
+    min_delta: float = 2e-3  # Used ONLY for MIL probes
+    seed: int = 42
 
     def make_loss(self):
         """
@@ -119,6 +143,10 @@ class TorchProbe(BaseProbe):
         """
         Initialize a TorchProbe instance.
         """
+        set_seed(cfg.seed)
+        self.generator = torch.Generator()
+        self.generator.manual_seed(cfg.seed)
+
         self.cfg = cfg
         self.model = model.to(cfg.device)
         self.criterion = cfg.make_loss()
@@ -151,14 +179,17 @@ class TorchProbe(BaseProbe):
         """
         Train the probe on the given dataset.
         """
+        num_workers = self.cfg.num_workers
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
             shuffle=True,
             collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
-            pin_memory=True,
-            persistent_workers=True,
+            num_workers=num_workers,
+            pin_memory=True if num_workers > 0 else False,
+            persistent_workers=True if num_workers > 0 else False,
+            generator=self.generator,
+            worker_init_fn=seed_worker if num_workers > 0 else None,
         )
 
         scheduler = self._build_scheduler(len(loader))
@@ -219,11 +250,16 @@ class TorchProbe(BaseProbe):
         """
         Predict class labels for the given dataset.
         """
+        num_workers = self.cfg.num_workers
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
             collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
+            num_workers=num_workers,
+            pin_memory=True if num_workers > 0 else False,
+            persistent_workers=True if num_workers > 0 else False,
+            generator=self.generator,
+            worker_init_fn=seed_worker if num_workers > 0 else None,
         )
 
         self.model.eval()
@@ -241,11 +277,16 @@ class TorchProbe(BaseProbe):
         """
         Predict class probabilities for the given dataset.
         """
+        num_workers = self.cfg.num_workers
         loader = DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
             collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
+            num_workers=num_workers,
+            pin_memory=True if num_workers > 0 else False,
+            persistent_workers=True if num_workers > 0 else False,
+            generator=self.generator,
+            worker_init_fn=seed_worker if num_workers > 0 else None,
         )
 
         self.model.eval()
@@ -282,6 +323,140 @@ class TorchProbe(BaseProbe):
         logging.info(f"[TorchProbe] Loaded checkpoint from {path}")
 
 
+# class MILTorchProbe(TorchProbe):
+#     """
+#     MIL probe: uses torchmil compute_loss and predict.
+#     """
+#
+#     def fit(self, dataset, collate_fn=None):
+#         """
+#         Train the MIL probe on the given dataset.
+#         """
+#         loader = DataLoader(
+#             dataset,
+#             batch_size=self.cfg.batch_size,
+#             shuffle=True,
+#             collate_fn=collate_fn,
+#             num_workers=0,
+#             pin_memory=False,
+#             persistent_workers=False,
+#         )
+#
+#         scheduler = self._build_scheduler(len(loader))
+#         best_loss = float("inf")
+#         best_state = None
+#         best_epoch = 0
+#
+#         for epoch in range(self.cfg.epochs):
+#             self.model.train()
+#             running_loss = 0.0
+#
+#             pbar = tqdm(
+#                 loader,
+#                 desc=f"Epoch {epoch+1}/{self.cfg.epochs}",
+#                 ncols=120,
+#                 leave=True,
+#             )
+#
+#             for X, mask, labels in pbar:
+#                 X = X.to(self.cfg.device, non_blocking=True)
+#                 mask = mask.to(self.cfg.device, non_blocking=True)
+#                 labels = labels.to(self.cfg.device, non_blocking=True).float()
+#
+#                 self.optimizer.zero_grad()
+#
+#                 _, loss_dict = self.model.compute_loss(labels, X, mask)
+#                 # print("LOSS_DICT TYPE:", type(loss_dict))
+#                 # print("LOSS_DICT KEYS:", list(loss_dict.keys()))
+#                 # print("LOSS_DICT:", {k: (v.item() if torch.is_tensor(v) else v) for k, v in loss_dict.items()})
+#
+#                 # raise SystemExit("Stop after first batch to inspect loss_dict")
+#
+#                 loss = loss_dict['BCEWithLogitsLoss']
+#                 loss.backward()
+#                 self.optimizer.step()
+#                 scheduler.step()
+#
+#                 running_loss += loss.item() * labels.size(0)
+#
+#             epoch_loss = running_loss / len(dataset)
+#             lr = scheduler.get_last_lr()[0]
+#
+#             tqdm.write(
+#                 f"[MILTorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
+#                 f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
+#             )
+#
+#             if best_loss == float("inf") or epoch_loss < best_loss * (1 - self.cfg.rel_tolerance):
+#                 best_loss = epoch_loss
+#                 best_epoch = epoch
+#                 best_state = {
+#                     k: v.cpu().clone()
+#                     for k, v in self.model.state_dict().items()
+#                 }
+#             elif epoch - best_epoch >= self.cfg.patience:
+#                 tqdm.write(f"[MILTorchProbe] Early stopping at epoch {epoch+1}")
+#                 break
+#
+#         if best_state:
+#             self.model.load_state_dict(best_state)
+#             logging.info(f"[MILTorchProbe] Restored best model (loss={best_loss:.4f})")
+#
+#
+#     def predict(self, dataset, collate_fn=None):
+#         """
+#         Predict classes for the given dataset.
+#         """
+#         loader = DataLoader(
+#             dataset,
+#             batch_size=self.cfg.batch_size,
+#             collate_fn=collate_fn,
+#             num_workers=self.cfg.num_workers,
+#         )
+#
+#         self.model.eval()
+#         preds = []
+#
+#         with torch.no_grad():
+#             for X, mask, _ in loader:
+#                 X = X.to(self.cfg.device)
+#                 mask = mask.to(self.cfg.device)
+#
+#                 Y_pred = self.model.predict(
+#                     X, mask, return_inst_pred=False
+#                 )
+#
+#                 preds.append((Y_pred > 0).long().cpu())
+#
+#         return torch.cat(preds).numpy()
+#
+#     def predict_proba(self, dataset, collate_fn=None):
+#         """Predict class probabilities for the given dataset.
+#         """
+#         loader = DataLoader(
+#             dataset,
+#             batch_size=self.cfg.batch_size,
+#             collate_fn=collate_fn,
+#             num_workers=self.cfg.num_workers,
+#         )
+#
+#         self.model.eval()
+#         probs = []
+#
+#         with torch.no_grad():
+#             for X, mask, _ in loader:
+#                 X = X.to(self.cfg.device)
+#                 mask = mask.to(self.cfg.device)
+#
+#                 Y_pred = self.model.predict(
+#                     X, mask, return_inst_pred=False
+#                 )
+#
+#                 probs.append(torch.sigmoid(Y_pred).cpu())
+#
+#         return torch.cat(probs).numpy()
+
+
 class MILTorchProbe(TorchProbe):
     """
     MIL probe: uses torchmil compute_loss and predict.
@@ -291,22 +466,34 @@ class MILTorchProbe(TorchProbe):
         """
         Train the MIL probe on the given dataset.
         """
-        loader = DataLoader(
-            dataset,
+        if len(dataset) > 1000:
+            num_workers = self.cfg.num_workers
+        else:
+            num_workers = 0
+
+        dl_kwargs = dict(
+            dataset=dataset,
             batch_size=self.cfg.batch_size,
             shuffle=True,
             collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
-            pin_memory=False,
-            persistent_workers=False,
+            num_workers=num_workers,
+            pin_memory=True if num_workers > 0 else False,
+            persistent_workers=True if num_workers > 0 else False,
+            generator=self.generator,
+            worker_init_fn=seed_worker if num_workers > 0 else None,
         )
+        if num_workers > 0:
+            dl_kwargs["prefetch_factor"] = 2
+
+        loader = DataLoader(**dl_kwargs)
 
         scheduler = self._build_scheduler(len(loader))
         best_loss = float("inf")
         best_state = None
         best_epoch = 0
 
-        for epoch in range(self.cfg.epochs):
+        max_epochs = min(self.cfg.epochs, self.cfg.max_mil_epochs)
+        for epoch in range (max_epochs):
             self.model.train()
             running_loss = 0.0
 
@@ -325,13 +512,7 @@ class MILTorchProbe(TorchProbe):
                 self.optimizer.zero_grad()
 
                 _, loss_dict = self.model.compute_loss(labels, X, mask)
-                # print("LOSS_DICT TYPE:", type(loss_dict))
-                # print("LOSS_DICT KEYS:", list(loss_dict.keys()))
-                # print("LOSS_DICT:", {k: (v.item() if torch.is_tensor(v) else v) for k, v in loss_dict.items()})
-
-                # raise SystemExit("Stop after first batch to inspect loss_dict")
-
-                loss = loss_dict['BCEWithLogitsLoss']
+                loss = loss_dict["BCEWithLogitsLoss"]
                 loss.backward()
                 self.optimizer.step()
                 scheduler.step()
@@ -345,14 +526,12 @@ class MILTorchProbe(TorchProbe):
                 f"[MILTorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
                 f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
             )
-
-            if best_loss == float("inf") or epoch_loss < best_loss * (1 - self.cfg.rel_tolerance):
+            improvement = best_loss - epoch_loss
+            # if best_loss == float("inf") or epoch_loss < best_loss * (1 - self.cfg.rel_tolerance):
+            if best_loss == float("inf") or improvement > self.cfg.min_delta:
                 best_loss = epoch_loss
                 best_epoch = epoch
-                best_state = {
-                    k: v.cpu().clone()
-                    for k, v in self.model.state_dict().items()
-                }
+                best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
             elif epoch - best_epoch >= self.cfg.patience:
                 tqdm.write(f"[MILTorchProbe] Early stopping at epoch {epoch+1}")
                 break
@@ -361,58 +540,80 @@ class MILTorchProbe(TorchProbe):
             self.model.load_state_dict(best_state)
             logging.info(f"[MILTorchProbe] Restored best model (loss={best_loss:.4f})")
 
+    # chache logits to avoid running MIL inference twice during predict and predict_proba
+
+    def _cache_key(self, dataset, collate_fn):
+        # Cache is valid only for the same dataset object + collate_fn + batch_size.
+        return (id(dataset), id(collate_fn), len(dataset), self.cfg.batch_size)
+
+    def _predict_logits_cached(self, dataset, collate_fn=None) -> np.ndarray:
+        """
+        Run MIL inference once and cache slide-level logits on CPU.
+        Returns logits as a 1D numpy array of shape (N,).
+        """
+        key = self._cache_key(dataset, collate_fn)
+
+        if getattr(self, "_pred_cache", None) is not None and self._pred_cache.get("key") == key:
+            return self._pred_cache["logits"]
+
+        num_workers = self.cfg.num_workers
+        dl_kwargs = dict(
+            dataset=dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            num_workers=num_workers,
+            pin_memory=True if num_workers > 0 else False,
+            persistent_workers=True if num_workers > 0 else False,
+            generator=self.generator,
+            worker_init_fn=seed_worker if num_workers > 0 else None,
+        )
+        if num_workers > 0:
+            dl_kwargs["prefetch_factor"] = 2
+
+        loader = DataLoader(**dl_kwargs)
+
+        self.model.eval()
+        logits_list = []
+
+        with torch.no_grad():
+            for X, mask, _ in loader:
+                X = X.to(self.cfg.device, non_blocking=True)
+                mask = mask.to(self.cfg.device, non_blocking=True)
+
+                logits = self.model.predict(X, mask, return_inst_pred=False)
+                logits_list.append(logits.detach().cpu())
+
+        logits = torch.cat(logits_list)
+
+        # ensure shape (N,) no matter if logits are (N,) or (N,1)
+        logits_np = logits.numpy().reshape(-1)
+
+        # cache only logits (tiny memory)
+        self._pred_cache = {"key": key, "logits": logits_np}
+
+        return logits_np
+
     def predict(self, dataset, collate_fn=None):
         """
-        Predict classes for the given dataset.
+        Predict hard labels (0/1) for the given dataset.
+        Uses cached logits to avoid running MIL inference twice.
         """
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
-        )
+        logits = self._predict_logits_cached(dataset, collate_fn)
 
-        self.model.eval()
-        preds = []
-
-        with torch.no_grad():
-            for X, mask, _ in loader:
-                X = X.to(self.cfg.device)
-                mask = mask.to(self.cfg.device)
-
-                Y_pred = self.model.predict(
-                    X, mask, return_inst_pred=False
-                )
-
-                preds.append((Y_pred > 0).long().cpu())
-
-        return torch.cat(preds).numpy()
+        # sigmoid(logits) >= 0.5  <=>  logits >= 0
+        preds = (logits >= 0.0).astype(np.int64)
+        return preds
 
     def predict_proba(self, dataset, collate_fn=None):
-        """Predict class probabilities for the given dataset.
         """
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
-        )
+        Predict probabilities for the positive class for the given dataset.
+        Uses cached logits to avoid running MIL inference twice.
+        """
+        logits = self._predict_logits_cached(dataset, collate_fn)
 
-        self.model.eval()
-        probs = []
-
-        with torch.no_grad():
-            for X, mask, _ in loader:
-                X = X.to(self.cfg.device)
-                mask = mask.to(self.cfg.device)
-
-                Y_pred = self.model.predict(
-                    X, mask, return_inst_pred=False
-                )
-
-                probs.append(torch.sigmoid(Y_pred).cpu())
-
-        return torch.cat(probs).numpy()
+        # sigmoid in numpy
+        probs = 1.0 / (1.0 + np.exp(-logits))
+        return probs
 
 
 class SklearnProbe(BaseProbe):
@@ -498,6 +699,7 @@ def build_probe(prepared, input_dim: int, num_classes: int):
         momentum=r["momentum"],
         loss=r["loss"],
         num_workers=r.get("num_workers", 4),
+        seed=r.get("seed", 42),
     )
 
     t = p["type"].lower()
@@ -517,21 +719,21 @@ def build_probe(prepared, input_dim: int, num_classes: int):
     if t == "clam":
         model = CLAM(in_shape=(input_dim,))
         return MILTorchProbe(model, cfg)
-    
+
     if t == "dsmil":
         model = DSMIL(in_shape=(input_dim,))
         return MILTorchProbe(model, cfg)
 
     if t == "logreg":
-        return SklearnProbe(LogisticRegression(max_iter=1000))
+        return SklearnProbe(LogisticRegression(max_iter=1000, random_state=cfg.seed))
 
     if t == "knn":
         return SklearnProbe(KNeighborsClassifier(n_neighbors=p["knn_neighbors"]))
 
     if t == "svm_linear":
-        return SklearnProbe(SVC(kernel="linear", probability=True))
+        return SklearnProbe(SVC(kernel="linear", probability=True, random_state=cfg.seed))
 
     if t == "svm_rbf":
-        return SklearnProbe(SVC(kernel="rbf", probability=True))
+        return SklearnProbe(SVC(kernel="rbf", probability=True, random_state=cfg.seed))
 
     raise ValueError(f"Unknown probe type: {p['type']}")

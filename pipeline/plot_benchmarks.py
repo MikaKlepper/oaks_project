@@ -124,6 +124,9 @@ def plot_learning_curve(df, out_dir: Path, agg: str):
 
     color_map, marker_map = _get_encoder_style_maps(encoders)
 
+    # show these k-shot values on the x-axis (if present in the data)
+    DESIRED_K_TICKS = [1, 5, 10, 20, 40, 80, 100]
+
     for probe in probes:
         df_probe = df[df["probe"] == probe]
 
@@ -163,11 +166,34 @@ def plot_learning_curve(df, out_dir: Path, agg: str):
             zorder=5,
         )
 
+        # annotate the best encoder above each k-shot point (paper-friendly, no title clutter)
+        for _, row in df_best.iterrows():
+            plt.annotate(
+                prettify(row["encoder"]),
+                xy=(row["k_shot"], row["roc_auc"]),
+                xytext=(0, 6),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                color="black",
+                alpha=0.9,
+                zorder=6,
+            )
+
         plt.xscale("log")
-        plt.xticks(sorted(df_probe["k_shot"].unique()))
+
+        # enforce desired ticks (only those that exist in the data)
+        present_ticks = [k for k in DESIRED_K_TICKS if k in set(df_probe["k_shot"].unique())]
+        if present_ticks:
+            plt.xticks(present_ticks, [str(k) for k in present_ticks])
+        else:
+            # fallback: show whatever is present
+            plt.xticks(sorted(df_probe["k_shot"].unique()))
+
         plt.xlabel("k-shot")
         plt.ylabel("ROC-AUC")
-        plt.title(f"{agg.upper()} aggregation — Probe: {probe}")
+        plt.title(f"Probe: {probe}")
         plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
         outfile = out_dir / f"{agg}_learning_curve_{probe}.png"
@@ -231,7 +257,8 @@ def generate_heatmaps(df, out_dir: Path, agg: str):
             linewidths=0.5,
             cbar_kws={"label": "ROC-AUC"},
         )
-        plt.title(f"{agg.upper()} aggregation — k={k}")
+        # plt.title(f"{agg.upper()} aggregation — k={k}")
+        plt.title(f"k={k}")
         plt.tight_layout()
         plt.savefig(out_dir / f"{agg}_heatmap_k{k}.png", dpi=300)
         plt.close()
@@ -252,7 +279,7 @@ def generate_heatmaps(df, out_dir: Path, agg: str):
         linewidths=0.5,
         cbar_kws={"label": "Mean ROC-AUC"},
     )
-    plt.title(f"{agg.upper()} aggregation — Mean ROC-AUC")
+    plt.title(f"Mean ROC-AUC across all k-shots")
     plt.tight_layout()
     plt.savefig(out_dir / f"{agg}_heatmap_mean.png", dpi=300)
     plt.close()

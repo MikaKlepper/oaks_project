@@ -8,11 +8,16 @@ from pathlib import Path
 #     "max": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/backup_old/max/max_benchmark_results.csv",
 # }
 
-files = {
-    "min": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/min_benchmark_results.csv",
-    "mean": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/mean_benchmark_results_without_full_train.csv",
-    "max": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/max_benchmark_results.csv",
-}
+# files = {
+#     "min": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/min_benchmark_results.csv",
+#     "mean": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/mean_benchmark_results_without_full_train.csv",
+#     "max": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/max_benchmark_results.csv",
+# }
+files ={"mean": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/tggates/mean_benchmark_results_without_full_training.csv",
+        "max": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/tggates/max_benchmark_results.csv",
+        "min": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/tggates/min_benchmark_results.csv",
+        "MIL": "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/tggates/mil_benchmark_results_without_full_training.csv"
+        }
 
 
 results = []
@@ -43,7 +48,7 @@ summary_df = pd.DataFrame(results)
 
 # Save output
 output_path = Path(
-    "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/roc_auc_summary.csv"
+    "/data/temporary/mika/repos/oaks_project/pipeline/outputs/eval/miccai/tggates/roc_auc_summary.csv"
 )
 summary_df.to_csv(output_path, index=False)
 

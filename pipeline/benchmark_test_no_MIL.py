@@ -13,27 +13,13 @@ from plot_benchmarks import (
 BASE_CONFIG = "configs/base_config.yaml"
 TEST_ONLY_DATASETS = {"ucb"}
 
-# ENCODERS = [
-#     "CONCH",
-#     "H_OPTIMUS_0",
-#     "H_OPTIMUS_1",
-#     "UNI",
-#     "UNI_2",
-#     "VIRCHOW2",
-#     "KAIKO",
-#     "PHIKON",
-#     "PHIKON_V2",
-#     "MIDNIGHT12K",
-#     "PRISM",
-#     "RESNET50",
-#     "HIBOU_B",
-#     "HIBOU_L",
-#     "PROV_GIGAPATH_224_SLIDE",
-#     "PROV_GIGAPATH_256_SLIDE",
-#     "PROV_GIGAPATH_224_TILE",
-#     "PROV_GIGAPATH_256_TILE",
-# ]
-ENCODERS =["H_OPTIMUS_1"]  # for quick testing, focus on one encoder]
+ENCODERS = [
+    "PROV_GIGAPATH_224_SLIDE",
+    "PROV_GIGAPATH_256_SLIDE",
+    "PROV_GIGAPATH_224_TILE",
+    "PROV_GIGAPATH_256_TILE",
+]
+# ENCODERS =["H_OPTIMUS_1"]  # for quick testing, focus on one encoder]
 
 PROBES = [
     "linear",
@@ -46,12 +32,14 @@ PROBES = [
     "clam",
     "dsmil",
 ]
-# K_VALUES = [100, 80, 40, 20, 10, 5, 1]
-K_VALUES =[2953]  # for quick testing, use all training samples for tggates
-AGGREGATION_METHODS = ["mean"]
+
+K_VALUES = [100, 80, 40, 20, 10, 5, 1]
+# K_VALUES =[2953]  # for quick testing, use all training samples for tggates
+# AGGREGATION_METHODS = ["mean","max","min"]
+AGGREGATION_METHODS = ["mean","max","min"]
 MIL_PROBES = {"abmil", "clam", "dsmil"}
 TEST_ENCODERS = {"H_OPTIMUS_1"}
-TEST_K_VALUES = {100, 2953}  # 2953 = all training samples for tggates
+TEST_K_VALUES = {100}  # 2953 = all training samples for tggates
 TEST_NON_MIL_AGGS = {"mean"}
 EPOCHS = 100
 

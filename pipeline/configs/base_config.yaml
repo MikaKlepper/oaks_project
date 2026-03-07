@@ -1,6 +1,6 @@
 # Base configuration for the OAKS Toxicology Pipeline
 
-experiment_root: "outputs/MICCAI_experiments_benchmark_final/${datasets.name}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
+experiment_root: "outputs/MICCAI_final_experiments_benchmark_final/${datasets.name}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
 
 data:
   project_root: "/data/temporary/mika/repos/oaks_project"
@@ -37,7 +37,7 @@ fewshot:
   k: null
 
 runtime:
-  num_workers: 0
+  num_workers: 4
   batch_size: 16
   epochs: 60
   lr: 1e-4
