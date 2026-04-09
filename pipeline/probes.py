@@ -1,13 +1,14 @@
 # pipeline/probes.py
 import logging
 import math
+from os import path
 from pathlib import Path
 from dataclasses import dataclass
 
 import numpy as np
 import joblib
 import torch
-from torch import nn, optim
+from torch import nn, optim, topk
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -15,11 +16,16 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
+from sklearn.decomposition import IncrementalPCA
+from sklearn.cluster import MiniBatchKMeans
+
 from torchmil.models import ABMIL
 from torchmil.models import CLAM_SB as CLAM
 from torchmil.models import DSMIL
 import os
 import random
+import normflows as nf
+
 
 
 def set_seed(seed: int):
@@ -39,6 +45,18 @@ def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
+
+def apply_pca(tiles, pca, device):
+    """
+    Apply PCA transform to tile embeddings.
+    """
+    if pca is None:
+        return tiles
+
+    tiles_np = tiles.cpu().numpy()
+    tiles_np = pca.transform(tiles_np)
+
+    return torch.from_numpy(tiles_np).to(device)
 
 
 class BaseProbe:
@@ -86,6 +104,7 @@ class MLPClassifier(nn.Module):
         return self.net(x)
 
 
+
 @dataclass
 class TorchProbeConfig:
     probe_type: str
@@ -105,8 +124,16 @@ class TorchProbeConfig:
     patience: int = 3
     rel_tolerance: float = 0.01
     max_mil_epochs = 15
-    min_delta: float = 2e-3  # Used ONLY for MIL probes
+    min_delta: float = 2e-3
     seed: int = 42
+
+    # flow-specific params
+    flow_train_max_tiles: int = 20000
+    flow_topk_frac: float = 0.05
+    flow_tau_percentile: float = 95
+    flow_pca_fit_max_tiles: int = 200000
+    flow_input_dim: int = 64
+
 
     def make_loss(self):
         """
@@ -322,141 +349,446 @@ class TorchProbe(BaseProbe):
         self.model.load_state_dict(state)
         logging.info(f"[TorchProbe] Loaded checkpoint from {path}")
 
+def build_flow(
+    input_dim: int,
+    num_layers: int = 8,         
+    hidden_dim: int = 256,         
+):
 
-# class MILTorchProbe(TorchProbe):
-#     """
-#     MIL probe: uses torchmil compute_loss and predict.
-#     """
-#
-#     def fit(self, dataset, collate_fn=None):
-#         """
-#         Train the MIL probe on the given dataset.
-#         """
-#         loader = DataLoader(
-#             dataset,
-#             batch_size=self.cfg.batch_size,
-#             shuffle=True,
-#             collate_fn=collate_fn,
-#             num_workers=0,
-#             pin_memory=False,
-#             persistent_workers=False,
-#         )
-#
-#         scheduler = self._build_scheduler(len(loader))
-#         best_loss = float("inf")
-#         best_state = None
-#         best_epoch = 0
-#
-#         for epoch in range(self.cfg.epochs):
-#             self.model.train()
-#             running_loss = 0.0
-#
-#             pbar = tqdm(
-#                 loader,
-#                 desc=f"Epoch {epoch+1}/{self.cfg.epochs}",
-#                 ncols=120,
-#                 leave=True,
-#             )
-#
-#             for X, mask, labels in pbar:
-#                 X = X.to(self.cfg.device, non_blocking=True)
-#                 mask = mask.to(self.cfg.device, non_blocking=True)
-#                 labels = labels.to(self.cfg.device, non_blocking=True).float()
-#
-#                 self.optimizer.zero_grad()
-#
-#                 _, loss_dict = self.model.compute_loss(labels, X, mask)
-#                 # print("LOSS_DICT TYPE:", type(loss_dict))
-#                 # print("LOSS_DICT KEYS:", list(loss_dict.keys()))
-#                 # print("LOSS_DICT:", {k: (v.item() if torch.is_tensor(v) else v) for k, v in loss_dict.items()})
-#
-#                 # raise SystemExit("Stop after first batch to inspect loss_dict")
-#
-#                 loss = loss_dict['BCEWithLogitsLoss']
-#                 loss.backward()
-#                 self.optimizer.step()
-#                 scheduler.step()
-#
-#                 running_loss += loss.item() * labels.size(0)
-#
-#             epoch_loss = running_loss / len(dataset)
-#             lr = scheduler.get_last_lr()[0]
-#
-#             tqdm.write(
-#                 f"[MILTorchProbe] Epoch {epoch+1}/{self.cfg.epochs} | "
-#                 f"Loss = {epoch_loss:.4f} | LR = {lr:.2e}"
-#             )
-#
-#             if best_loss == float("inf") or epoch_loss < best_loss * (1 - self.cfg.rel_tolerance):
-#                 best_loss = epoch_loss
-#                 best_epoch = epoch
-#                 best_state = {
-#                     k: v.cpu().clone()
-#                     for k, v in self.model.state_dict().items()
-#                 }
-#             elif epoch - best_epoch >= self.cfg.patience:
-#                 tqdm.write(f"[MILTorchProbe] Early stopping at epoch {epoch+1}")
-#                 break
-#
-#         if best_state:
-#             self.model.load_state_dict(best_state)
-#             logging.info(f"[MILTorchProbe] Restored best model (loss={best_loss:.4f})")
-#
-#
-#     def predict(self, dataset, collate_fn=None):
-#         """
-#         Predict classes for the given dataset.
-#         """
-#         loader = DataLoader(
-#             dataset,
-#             batch_size=self.cfg.batch_size,
-#             collate_fn=collate_fn,
-#             num_workers=self.cfg.num_workers,
-#         )
-#
-#         self.model.eval()
-#         preds = []
-#
-#         with torch.no_grad():
-#             for X, mask, _ in loader:
-#                 X = X.to(self.cfg.device)
-#                 mask = mask.to(self.cfg.device)
-#
-#                 Y_pred = self.model.predict(
-#                     X, mask, return_inst_pred=False
-#                 )
-#
-#                 preds.append((Y_pred > 0).long().cpu())
-#
-#         return torch.cat(preds).numpy()
-#
-#     def predict_proba(self, dataset, collate_fn=None):
-#         """Predict class probabilities for the given dataset.
-#         """
-#         loader = DataLoader(
-#             dataset,
-#             batch_size=self.cfg.batch_size,
-#             collate_fn=collate_fn,
-#             num_workers=self.cfg.num_workers,
-#         )
-#
-#         self.model.eval()
-#         probs = []
-#
-#         with torch.no_grad():
-#             for X, mask, _ in loader:
-#                 X = X.to(self.cfg.device)
-#                 mask = mask.to(self.cfg.device)
-#
-#                 Y_pred = self.model.predict(
-#                     X, mask, return_inst_pred=False
-#                 )
-#
-#                 probs.append(torch.sigmoid(Y_pred).cpu())
-#
-#         return torch.cat(probs).numpy()
+    flows = []
+
+    for _ in range(num_layers):
+
+        net = nf.nets.MLP(
+            [
+                input_dim // 2,
+                hidden_dim,
+                hidden_dim,
+                hidden_dim,
+                hidden_dim,
+                input_dim,
+            ],
+            init_zeros=True,
+        )
+        flows.append(nf.flows.ActNorm(input_dim))
+
+        flows.append(
+            nf.flows.AffineCouplingBlock(
+                param_map=net
+            )
+        )
+
+        flows.append(
+            nf.flows.Permute(input_dim, mode="shuffle")
+        )
+
+    base = nf.distributions.base.DiagGaussian(
+        input_dim,
+        trainable=True
+    )
+
+    return nf.NormalizingFlow(base, flows)
 
 
+class TorchPCA(nn.Module):
+    def __init__(self, components, mean):
+        super().__init__()
+        self.register_buffer("components", components)
+        self.register_buffer("mean", mean)
+
+    def forward(self, x):
+        return (x - self.mean) @ self.components.T
+
+class FlowProbe(TorchProbe):
+
+    def __init__(self, model, cfg: TorchProbeConfig, pca=None):
+        set_seed(cfg.seed)
+
+        self.cfg = cfg
+        self.model = model.to(cfg.device)
+        self.pca = pca
+
+        self.projector = None
+
+        self.optimizer = optim.AdamW(
+            self.model.parameters(),
+            lr=cfg.lr,
+            weight_decay=cfg.weight_decay,
+        )
+
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=cfg.epochs,
+        )
+
+        self.generator = torch.Generator().manual_seed(cfg.seed)
+
+        self._pred_cache = None
+        self.tau = None
+
+        self.train_max_tiles = cfg.flow_train_max_tiles
+        self.topk_frac = cfg.flow_topk_frac
+        self.tau_percentile = cfg.flow_tau_percentile
+        self.pca_fit_max_tiles = cfg.flow_pca_fit_max_tiles
+
+        self.flow_input_dim = cfg.flow_input_dim
+
+        self.device = cfg.device
+        self.use_amp = "cuda" in cfg.device
+
+        print(f"[FlowProbe] Using flow_input_dim = {self.flow_input_dim}")
+
+    # -------------------------
+    # PCA
+    # -------------------------
+    def _build_projector(self):
+        if self.pca is None:
+            self.projector = None
+            return
+
+        components = torch.tensor(
+            self.pca.components_, dtype=torch.float32, device=self.device
+        )
+        mean = torch.tensor(
+            self.pca.mean_, dtype=torch.float32, device=self.device
+        )
+
+        self.projector = TorchPCA(components, mean).to(self.device)
+
+        # remove sklearn dependency
+        self.pca = None
+
+    def _apply_pca(self, tiles):
+        if self.projector is None:
+            return tiles
+        return self.projector(tiles)
+
+    # -------------------------
+    # HELPERS
+    # -------------------------
+    def _project(self, tiles):
+        tiles = self._apply_pca(tiles)
+
+        if tiles.shape[1] != self.flow_input_dim:
+            raise ValueError(
+                f"[FlowProbe] Dim mismatch: got {tiles.shape[1]}, expected {self.flow_input_dim}"
+            )
+
+        # return torch.nn.functional.normalize(tiles, dim=1)
+        return tiles
+
+    def _extract_tiles(self, X, mask):
+        B, N, D = X.shape
+        tiles = X.reshape(B * N, D)
+        mask = mask.reshape(B * N).bool()
+        return tiles[mask]
+
+    def _subsample(self, tiles):
+        if tiles.shape[0] <= self.train_max_tiles:
+            return tiles
+        idx = torch.randperm(tiles.shape[0])[:self.train_max_tiles]
+        return tiles[idx]
+
+    def _score_tiles(self, tiles):
+        return -self.model.log_prob(tiles)
+
+    def _aggregate_slide(self, X, mask):
+        B, N, D = X.shape
+
+        tiles = X.reshape(B * N, D)
+        mask_flat = mask.reshape(B * N).bool()
+        tiles = tiles[mask_flat]
+
+        if tiles.numel() == 0:
+            return torch.zeros(B, device=X.device)
+
+        tiles = self._project(tiles)
+        scores = self._score_tiles(tiles)
+
+        slide_ids = torch.arange(B, device=X.device).repeat_interleave(N)
+        slide_ids = slide_ids[mask_flat]
+
+        slide_scores = []
+
+        # for b in range(B):
+        #     s = scores[slide_ids == b]
+
+        #     if s.numel() == 0:
+        #         slide_scores.append(torch.tensor(0.0, device=X.device))
+        #         continue
+        #     # remove noise
+        #     k = max(1, int(self.topk_frac * s.shape[0]))
+        #     topk_vals = s.topk(k).values
+        #     # stabalize by subtracting mean of top-k
+        #     topk_vals = topk_vals - topk_vals.max()
+        #     # softmax
+        #     weights = torch.softmax(topk_vals / 10, dim=0)
+        #     # weighted average of top-k
+        #     score = (topk_vals * weights).sum()
+        #     slide_scores.append(score)
+            
+        #     # k = max(1, int(self.topk_frac * s.shape[0]))
+        #     # slide_scores.append(s.topk(k).values.mean())
+        #     # slide_scores.append(s.mean())
+
+        # return torch.stack(slide_scores)
+        # slide_scores = []
+
+
+
+        for b in range(B):
+            s = scores[slide_ids == b]
+
+            if s.numel() == 0:
+                slide_scores.append(torch.tensor(0.0, device=X.device))
+                continue
+
+            k = max(1, int(self.topk_frac * s.shape[0]))
+            topk_vals = s.topk(k).values
+
+            # score = topk_vals.mean()
+            score = torch.quantile(topk_vals, 0.8)
+
+            slide_scores.append(score)
+
+        return torch.stack(slide_scores)
+
+    # -------------------------
+    # PCA FIT (FAST VERSION)
+    # -------------------------
+    def _fit_pca(self, dataset, collate_fn=None):
+        if self.pca is None:
+            return
+
+        print("[FlowProbe] Fitting PCA...")
+
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=0,        # IMPORTANT
+            pin_memory=False,     # IMPORTANT
+        )
+
+        collected = 0
+
+        for X, mask, _ in tqdm(loader, desc="PCA Fit", ncols=120):
+
+            B, N, D = X.shape
+
+            tiles = X.reshape(B * N, D)
+            mask = mask.reshape(B * N).bool()
+            tiles = tiles[mask]
+
+            if tiles.numel() == 0:
+                continue
+
+            remaining = self.pca_fit_max_tiles - collected
+            if remaining <= 0:
+                break
+
+            if tiles.shape[0] > remaining:
+                idx = torch.randperm(tiles.shape[0])[:remaining]
+                tiles = tiles[idx]
+
+            self.pca.partial_fit(tiles.numpy())
+            collected += tiles.shape[0]
+
+        print(f"[FlowProbe] PCA fitted on {collected} tiles")
+
+        self._build_projector()
+
+    # -------------------------
+    # TRAIN
+    # -------------------------
+    def fit(self, dataset, collate_fn=None):
+
+        self._pred_cache = None
+
+        if self.pca is not None:
+            self._fit_pca(dataset, collate_fn)
+
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            persistent_workers=True,
+            generator=self.generator,
+            worker_init_fn=seed_worker,
+        )
+
+        # ✅ COMPATIBLE AMP (your PyTorch version)
+        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+
+        best_loss = float("inf")
+        best_state = None
+        best_epoch = 0
+
+        for epoch in range(self.cfg.epochs):
+
+            self.model.train()
+            running_loss = 0
+            total_tiles = 0
+
+            pbar = tqdm(loader, desc=f"Epoch {epoch+1}", ncols=120)
+
+            for X, mask, _ in pbar:
+
+                # CPU first
+                tiles = self._extract_tiles(X, mask)
+                if tiles.numel() == 0:
+                    continue
+
+                # subsample BEFORE GPU
+                tiles = self._subsample(tiles)
+
+                # move to GPU
+                tiles = tiles.to(self.device, non_blocking=True)
+
+                tiles = self._project(tiles)
+
+                self.optimizer.zero_grad(set_to_none=True)
+
+                with torch.cuda.amp.autocast(enabled=self.use_amp):
+                    loss = self.model.forward_kld(tiles)
+
+                scaler.scale(loss).backward()
+                scaler.step(self.optimizer)
+                scaler.update()
+
+                running_loss += loss.item() * tiles.shape[0]
+                total_tiles += tiles.shape[0]
+
+                pbar.set_postfix(loss=f"{loss.item():.2f}")
+
+            self.scheduler.step()
+
+            epoch_loss = running_loss / max(total_tiles, 1)
+            tqdm.write(f"[FlowProbe] Epoch {epoch+1} | Loss={epoch_loss:.4f}")
+
+            if best_loss == float("inf") or (best_loss - epoch_loss > self.cfg.min_delta):
+                best_loss = epoch_loss
+                best_epoch = epoch
+                best_state = {k: v.detach().cpu() for k, v in self.model.state_dict().items()}
+            elif epoch - best_epoch >= self.cfg.patience:
+                break
+
+        if best_state:
+            self.model.load_state_dict(best_state)
+
+        scores = self._predict_scores_cached(dataset, collate_fn)
+        self.tau = float(np.percentile(scores, self.tau_percentile))
+
+        print(f"[FlowProbe] tau = {self.tau:.4f}")
+
+    # -------------------------
+    # INFERENCE
+    # -------------------------
+    def _predict_scores_cached(self, dataset, collate_fn=None):
+
+        key = (id(dataset), len(dataset), self.cfg.batch_size)
+
+        if self._pred_cache is not None and self._pred_cache["key"] == key:
+            return self._pred_cache["scores"]
+
+        loader = DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            persistent_workers=True,
+        )
+
+        self.model.eval()
+        all_scores = []
+
+        with torch.no_grad():
+            for X, mask, _ in tqdm(loader, desc="Inference", ncols=120):
+                X = X.to(self.device)
+                mask = mask.to(self.device)
+
+                slide_scores = self._aggregate_slide(X, mask)
+                all_scores.append(slide_scores.cpu())
+
+        scores = torch.cat(all_scores).numpy()
+
+        self._pred_cache = {"key": key, "scores": scores}
+        return scores
+
+    # -------------------------
+    # PREDICT
+    # -------------------------
+    def predict(self, dataset, collate_fn=None):
+        if self.tau is None:
+            raise RuntimeError("tau is None → model not trained or loaded")
+
+        scores = self._predict_scores_cached(dataset, collate_fn)
+        return (scores > self.tau).astype(np.int64)
+
+    def predict_proba(self, dataset, collate_fn=None):
+        if self.tau is None:
+            raise RuntimeError("tau is None → model not trained or loaded")
+
+        scores = self._predict_scores_cached(dataset, collate_fn)
+
+        x = np.clip(scores - self.tau, -50, 50)
+        return 1.0 / (1.0 + np.exp(-x))
+
+    # -------------------------
+    # SAVE / LOAD
+    # -------------------------
+    def save(self, path):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        pca_state = None
+        if self.projector is not None:
+            pca_state = {
+                "components": self.projector.components.cpu(),
+                "mean": self.projector.mean.cpu(),
+            }
+
+        torch.save(
+            {
+                "model": self.model.state_dict(),
+                "optimizer": self.optimizer.state_dict(),
+                "scheduler": self.scheduler.state_dict(),
+                "tau": self.tau,
+                "pca": pca_state,
+            },
+            path,
+        )
+
+        print(f"[FlowProbe] Saved to {path}")
+
+    def load(self, path):
+        ckpt = torch.load(path, map_location=self.device)
+
+        self.model.load_state_dict(ckpt["model"])
+        self.optimizer.load_state_dict(ckpt["optimizer"])
+        self.scheduler.load_state_dict(ckpt["scheduler"])
+
+        self.tau = ckpt["tau"]
+
+        pca = ckpt["pca"]
+        if pca is not None:
+            self.projector = TorchPCA(
+                pca["components"].to(self.device),
+                pca["mean"].to(self.device),
+            )
+        else:
+            self.projector = None
+
+        self._pred_cache = None
+
+        print(f"[FlowProbe] Loaded from {path}")
+
+        
 class MILTorchProbe(TorchProbe):
     """
     MIL probe: uses torchmil compute_loss and predict.
@@ -690,6 +1022,7 @@ def build_probe(prepared, input_dim: int, num_classes: int):
         probe_type=p["type"],
         hidden_dim=p["hidden_dim"],
         num_layers=p["num_layers"],
+
         epochs=r["epochs"],
         lr=r["lr"],
         batch_size=r["batch_size"],
@@ -700,6 +1033,13 @@ def build_probe(prepared, input_dim: int, num_classes: int):
         loss=r["loss"],
         num_workers=r.get("num_workers", 4),
         seed=r.get("seed", 42),
+
+        # flow params
+        flow_input_dim=p.get("flow_input_dim", input_dim),
+        flow_train_max_tiles=p.get("flow_train_max_tiles", 20000),
+        flow_topk_frac=p.get("flow_topk_frac", 0.05),
+        flow_tau_percentile=p.get("flow_tau_percentile", 95),
+        flow_pca_fit_max_tiles=p.get("flow_pca_fit_max_tiles", 200000),
     )
 
     t = p["type"].lower()
@@ -723,6 +1063,26 @@ def build_probe(prepared, input_dim: int, num_classes: int):
     if t == "dsmil":
         model = DSMIL(in_shape=(input_dim,))
         return MILTorchProbe(model, cfg)
+   
+    if t == "flow":
+
+        print(f"[Flow] input_dim = {input_dim}")
+        print(f"[Flow] flow_input_dim = {cfg.flow_input_dim}")
+
+        pca = None
+        if cfg.flow_input_dim < input_dim:
+            print("[Flow] PCA ENABLED")
+            pca = IncrementalPCA(n_components=cfg.flow_input_dim)
+        else:
+            print("[Flow] PCA DISABLED")
+
+        model = build_flow(
+            input_dim=cfg.flow_input_dim,
+            hidden_dim=p.get("flow_hidden", 256),   # still fine here
+            num_layers=p.get("flow_layers", 8),
+        )
+
+        return FlowProbe(model, cfg, pca=pca)
 
     if t == "logreg":
         return SklearnProbe(LogisticRegression(max_iter=1000, random_state=cfg.seed))

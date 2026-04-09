@@ -4,29 +4,22 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=40G
 #SBATCH --time=7-00:00:00
-#SBATCH --job-name="l-h_optimus_1_ucb"
-#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_ucb.out
+#SBATCH --job-name="l-h_optimus_1_missing_slides"
+#SBATCH --output=/data/pathology/projects/mika/repos/oaks_project/logs/slurm-%j-l-h_optimus_1_missing_slides.out
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary
 #SBATCH --container-image="dockerdex.umcn.nl:5005#clemsgrs/slide2vec:v1.3.0"
-#SBATCH --qos=low
+#SBATCH --qos=high
 #SBATCH --requeue
 
-echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON UCB DATASET"
+echo "RUNNING SLIDE2VEC WITH H-OPTIMUS-1 ON TG-GATES DATASET (missing slides)"
 
-# --------------------------------------------------
-# Paths
-# --------------------------------------------------
 
 REPO_DIR="/data/temporary/mika/repos/oaks_project/slide_2_vec"
 CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1.yaml"
 
-# WSIs are read exclusively from CSV:
-# /data/temporary/mika/repos/oaks_project/splitting_data/Splits/usb_wsi_paths.csv
-# (absolute paths into /data/pa_cpgarchive/archives/toxicology/UCB/Slides)
-
-SCRATCH_BASE="/scratch_mikaklepper_ucb"
+SCRATCH_BASE="/scratch_mikaklepper_tg_gates"
 SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1"
-FINAL_OUTPUT_DIR="/data/temporary/toxicology/UCB/liver/Features_FM/H_OPTIMUS_1"
+FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/Missing_slides_FM/features/H_OPTIMUS_1"
 
 echo "Creating required directories..."
 mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
@@ -35,7 +28,11 @@ mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
 # HuggingFace cache on scratch
 # --------------------------------------------------
 
-export HF_TOKEN="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"
+export HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}"
+if [ -z "$HF_TOKEN" ]; then
+  echo "HF_TOKEN is not set. Export HF_TOKEN or HUGGINGFACE_HUB_TOKEN before running."
+  exit 1
+fi
 
 export HOME="$SCRATCH_BASE"
 export HF_HOME="$SCRATCH_BASE/hf_cache"
@@ -59,9 +56,6 @@ pip3 install --quiet \
     git+https://github.com/lilab-stanford/MUSK.git \
     git+https://github.com/Mahmoodlab/CONCH.git
 
-# --------------------------------------------------
-# Background syncing (every 30 minutes)
-# --------------------------------------------------
 
 (
     while true; do
@@ -96,4 +90,4 @@ echo "Performing final sync..."
 mkdir -p "$FINAL_OUTPUT_DIR"
 cp -ur "$SCRATCH_OUTPUT_DIR"/* "$FINAL_OUTPUT_DIR"/ 2>/dev/null
 
-echo "Slide2Vec H-OPTIMUS-1 UCB job completed successfully."
+echo "Slide2Vec H-OPTIMUS-1 missing slides job completed successfully."

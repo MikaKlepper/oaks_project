@@ -6,7 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
-from eval_plots import plot_severity_histogram, plot_location_histogram
+from eval_plots import (
+    plot_location_histogram,
+    plot_severity_histogram,
+    plot_severity_misclassification_rate,
+)
 
 
 def save_json(path: Path, payload: dict):
@@ -42,6 +46,34 @@ def count_distribution(values):
     return {str(k): int(v) for k, v in zip(u, c)}
 
 
+def compute_severity_misclassification_summary(dataset, wrong_idx):
+    """
+    Compute misclassification rate by severity level plus the normal bucket.
+
+    The denominator is all dataset samples with that severity, and the numerator
+    is misclassified samples with that same severity.
+    """
+    dataset_severity = np.asarray(dataset.severity)
+    wrong_idx = np.asarray(wrong_idx)
+
+    valid_levels = [0, 1, 2, 3, 4]
+    summary = {}
+
+    for severity in valid_levels:
+        total = int(np.sum(dataset_severity == severity))
+        if total == 0:
+            continue
+
+        wrong = int(np.sum(dataset_severity[wrong_idx] == severity))
+        summary[str(severity)] = {
+            "total_cases": total,
+            "misclassified_cases": wrong,
+            "misclassification_pct": round((100.0 * wrong) / total, 2),
+        }
+
+    return summary
+
+
 def run_misclassification_analysis(dataset, y_true, y_pred, exp_root, stage):
     """
     Run detailed misclassification analysis and save results.
@@ -50,6 +82,7 @@ def run_misclassification_analysis(dataset, y_true, y_pred, exp_root, stage):
         - misclassified.json
         - misclassified_analysis.json
         - severity_histogram.png
+        - severity_misclassification_rate.png
         - location_histogram.png
     """
     logging.info("[Eval] Running misclassification analysis")
@@ -112,10 +145,17 @@ def run_misclassification_analysis(dataset, y_true, y_pred, exp_root, stage):
         },
     }
 
+    severity_rate_summary = compute_severity_misclassification_summary(
+        dataset, wrong_idx
+    )
+    if severity_rate_summary:
+        analysis["severity_misclassification_rate"] = severity_rate_summary
+
     save_json(metrics_dir / "misclassified_analysis.json", analysis)
 
-    # histograms of severity and location for misclassified samples
-    plot_severity_histogram(wrong_severity, metrics_dir)
+    # severity plot now shows percentage rate per bucket, including normal cases
+    plot_severity_histogram(severity_rate_summary, metrics_dir)
+    plot_severity_misclassification_rate(severity_rate_summary, metrics_dir)
     plot_location_histogram(wrong_location, metrics_dir)
 
     logging.info("[Eval] Misclassification analysis saved")

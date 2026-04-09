@@ -14,6 +14,7 @@ from data.dataset_check import check_subset_consistency
 from probes import build_probe, TorchProbe, default_probe_path
 from logger import setup_logger
 from metrics import compute_and_log_metrics
+from utils.experiment_registry import append_experiment_row
 
 
 def _dataset_to_numpy(dataset, batch_size: int = 256):
@@ -62,8 +63,19 @@ def run_test(cfg):
         exp_root=exp_root,
         class_names=["No Hypertrophy", "Hypertrophy"],
     )
+    registry_path = append_experiment_row(
+        cfg,
+        prepared,
+        stage="test",
+        status="completed",
+        exp_root=exp_root,
+        metrics=metrics,
+        checkpoint_path=ckpt_path,
+        metrics_path=exp_root / "metrics" / "metrics.json",
+    )
 
     logging.info(f"[Test] Metrics: {metrics}")
+    logging.info(f"[Test] Updated experiment registry -> {registry_path}")
     logging.info("========== TEST STAGE DONE ==========")
     return metrics
 

@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=30G
+#SBATCH --mem=10G
 #SBATCH --time=7-00:00:00
 #SBATCH --job-name="l-TEST"
 #SBATCH --container-mounts=/data/pa_cpgarchive:/data/pa_cpgarchive,/data/pathology/projects:/data/temporary

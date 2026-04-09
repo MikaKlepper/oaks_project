@@ -142,9 +142,13 @@ def main(args):
             wsi_paths_to_process = [
                 Path(x) for x in process_stack.wsi_path.values.tolist()
             ]
+            # mask_paths_to_process = [
+            #     Path(x) if x is not None else x
+            #     for x in process_stack.mask_path.values.tolist()
+            # ]
             mask_paths_to_process = [
-                Path(x) if x is not None else x
-                for x in process_stack.mask_path.values.tolist()
+            Path(x) if isinstance(x, str) and x != "" else None
+            for x in process_stack.mask_path.values.tolist()
             ]
 
             # setup directories for coordinates and visualization

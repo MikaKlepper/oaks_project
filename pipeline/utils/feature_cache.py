@@ -16,6 +16,10 @@ def ensure_cached_features(prepared):
     """
 
     data = prepared["data"]
+    if data.get("feature_backend") == "feature_bank":
+        print("[CACHE] Feature-bank backend active -> skipping legacy cache generation.")
+        return
+
     df   = data["df"]
 
     slide_dir  = Path(data["slide_dir"])

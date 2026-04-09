@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 from pathlib import Path
+import h5py
+import numpy as np
 
 from data.process_slide_features import load_raw_features
 
@@ -24,7 +26,10 @@ class ToxicologyMILDataset(Dataset):
         self.ids = list(data["ids"])
         self.labels = list(data["labels"])
 
+        self.feature_backend = data.get("feature_backend", "legacy")
+        self.raw_slide_artifacts = data.get("raw_feature_artifacts") or {}
         self.raw_slide_dir = [data["raw_slide_dir"]]
+        self._h5_files = {}
 
         self.embed_dim = int(data["embed_dim"])
 
@@ -61,11 +66,41 @@ class ToxicologyMILDataset(Dataset):
         """
         Try all raw feature directories for a slide.
         """
+        if self.feature_backend == "feature_bank":
+            artifact = self.raw_slide_artifacts.get(str(slide_id))
+            if artifact is None:
+                return None
+
+            h5_path = artifact["resolved_hdf5_path"]
+            h5_file = self._h5_files.get(h5_path)
+            if h5_file is None:
+                h5_file = h5py.File(h5_path, "r")
+                self._h5_files[h5_path] = h5_file
+
+            x = torch.from_numpy(np.asarray(h5_file[artifact["hdf5_key"]]))
+            if x.ndim == 4 and x.shape[-2:] == (1, 1):
+                x = x.squeeze(-1).squeeze(-1)
+            if x.ndim == 1:
+                x = x.unsqueeze(0)
+            elif x.ndim != 2:
+                raise ValueError(
+                    f"[ERROR] Invalid tensor shape {tuple(x.shape)} for slide {slide_id}. "
+                    "Expected (D,), (N,D), or (N,D,1,1)."
+                )
+            return x
+
         for d in self.raw_slide_dir:
             path = d / f"{slide_id}.pt"
             if path.exists():
                 return load_raw_features(path)
         return None
+
+    def __del__(self):
+        for h5_file in self._h5_files.values():
+            try:
+                h5_file.close()
+            except Exception:
+                pass
 
     def __getitem__(self, idx):
         sample_id = self.ids[idx]

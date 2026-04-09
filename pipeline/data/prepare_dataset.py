@@ -4,6 +4,12 @@ import ast
 import pandas as pd
 from pathlib import Path
 
+from utils.feature_bank_resolver import (
+    feature_bank_enabled,
+    resolve_prepared_feature_bank,
+)
+
+
 def _normalize_severity(severity):
     """
     Normalize severity from a string or number to an integer.
@@ -55,22 +61,13 @@ def _normalize_severity(severity):
 
     return 0
 
-def _extract_hypertrophy_location_severity(row):
-    """
-    Extract location and severity of hypertrophy from a given row.
 
-    Parameters
-    ----------
-    row : pandas.Series
-        A single row from a pandas DataFrame containing the data.
-
-    Returns
-    -------
-    int, str, str
-        A tuple containing the presence of hypertrophy, location and severity.
-        Presence is 1 if hypertrophy is found, 0 otherwise.
-        Location and severity are None if not found.
+def _extract_target_location_severity(row, target_finding):
     """
+    Extract presence, location, and severity for a configured finding.
+    """
+    target = str(target_finding).lower().strip()
+
     if "findings" in row and isinstance(row["findings"], str):
         try:
             findings = ast.literal_eval(row["findings"])
@@ -80,7 +77,7 @@ def _extract_hypertrophy_location_severity(row):
         if isinstance(findings, list):
             for entry in findings:
                 if isinstance(entry, list) and len(entry) >= 3:
-                    if isinstance(entry[0], str) and entry[0].lower() == "hypertrophy":
+                    if isinstance(entry[0], str) and entry[0].lower() == target:
                         return 1, entry[1], entry[2]
 
         return 0, None, None
@@ -98,7 +95,7 @@ def _extract_hypertrophy_location_severity(row):
             return 0, None, None
 
         for item in findings:
-            if isinstance(item, str) and "hypertrophy" in item.lower():
+            if isinstance(item, str) and target in item.lower():
                 location = None
                 severity = None
 
@@ -118,15 +115,154 @@ def _extract_hypertrophy_location_severity(row):
     return 0, None, None
 
 
+def _extract_any_abnormality_label(row):
+    """
+    Extract a binary "any abnormality present" label from available metadata.
+    """
+    if "No microscopic finding" in row and pd.notna(row["No microscopic finding"]):
+        return (0 if bool(row["No microscopic finding"]) else 1), None, None
+
+    if "findings" in row and isinstance(row["findings"], str):
+        try:
+            findings = ast.literal_eval(row["findings"])
+        except Exception:
+            findings = None
+
+        if isinstance(findings, list):
+            return (1 if len(findings) > 0 else 0), None, None
+
+    if "liver_findings_microscopy" in row:
+        findings = row["liver_findings_microscopy"]
+
+        if isinstance(findings, str):
+            try:
+                findings = ast.literal_eval(findings)
+            except Exception:
+                findings = None
+
+        if isinstance(findings, list):
+            cleaned = [
+                item for item in findings
+                if isinstance(item, str) and item.strip() and item.strip().lower() != "nan"
+            ]
+            return (1 if len(cleaned) > 0 else 0), None, None
+
+    return 0, None, None
+
+
+def _coerce_label_series(series, positive_value=None):
+    """
+    Coerce a metadata label column into a binary 0/1 series.
+    """
+    if positive_value is not None:
+        if pd.api.types.is_bool_dtype(series):
+            positive = str(positive_value).strip().lower()
+            if positive not in {"true", "false", "1", "0"}:
+                raise ValueError(
+                    "For boolean target columns, cfg.data.target_positive_value "
+                    "must be one of: true, false, 1, 0."
+                )
+            positive_bool = positive in {"true", "1"}
+            return (series.fillna(False) == positive_bool).astype(int)
+
+        if pd.api.types.is_numeric_dtype(series):
+            try:
+                positive_num = float(positive_value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "For numeric target columns, cfg.data.target_positive_value "
+                    "must be numeric."
+                ) from exc
+            return (series.fillna(0) == positive_num).astype(int)
+
+        normalized = series.fillna("").astype(str).str.strip().str.lower()
+        positive = str(positive_value).strip().lower()
+        return (normalized == positive).astype(int)
+
+    if pd.api.types.is_bool_dtype(series):
+        return series.astype(int)
+
+    if pd.api.types.is_numeric_dtype(series):
+        return series.fillna(0).astype(int)
+
+    normalized = series.fillna("").astype(str).str.strip().str.lower()
+    true_values = {"1", "true", "yes", "y", "positive", "present", "abnormal"}
+    false_values = {"0", "false", "no", "n", "negative", "absent", "normal", ""}
+
+    unknown = set(normalized.unique()) - true_values - false_values
+    if unknown:
+        raise ValueError(
+            "Could not infer binary labels from target column values "
+            f"{sorted(unknown)}. Set cfg.data.target_positive_value explicitly."
+        )
+
+    return normalized.isin(true_values).astype(int)
+
+
+def _apply_target_definition(df, cfg):
+    """
+    Build the generic target columns used by the training pipeline.
+    """
+    target_mode = str(getattr(cfg.data, "target_mode", "finding")).lower()
+
+    if target_mode == "finding":
+        target_finding = getattr(cfg.data, "target_finding", "hypertrophy")
+        parsed = df.apply(
+            lambda row: _extract_target_location_severity(row, target_finding),
+            axis=1,
+        )
+        df["TargetLabel"] = parsed.apply(lambda x: x[0]).astype(int)
+        df["TargetLocation"] = parsed.apply(lambda x: x[1])
+        df["TargetSeverity_raw"] = parsed.apply(lambda x: x[2])
+        df["TargetSeverity"] = df["TargetSeverity_raw"].apply(_normalize_severity)
+
+        if str(target_finding).lower() == "hypertrophy":
+            df["HasHypertrophy"] = df["TargetLabel"]
+            df["Location"] = df["TargetLocation"]
+            df["Severity_raw"] = df["TargetSeverity_raw"]
+            df["Severity"] = df["TargetSeverity"]
+
+        return df
+
+    if target_mode == "column":
+        target_column = getattr(cfg.data, "target_column", None)
+        if not target_column:
+            raise ValueError(
+                "cfg.data.target_column must be set when cfg.data.target_mode='column'"
+            )
+        if target_column not in df.columns:
+            raise ValueError(
+                f"Target column '{target_column}' not found in metadata CSV"
+            )
+
+        positive_value = getattr(cfg.data, "target_positive_value", None)
+        df["TargetLabel"] = _coerce_label_series(df[target_column], positive_value)
+        df["TargetLocation"] = None
+        df["TargetSeverity_raw"] = None
+        df["TargetSeverity"] = 0
+        return df
+
+    if target_mode == "any_abnormality":
+        parsed = df.apply(_extract_any_abnormality_label, axis=1)
+        df["TargetLabel"] = parsed.apply(lambda x: x[0]).astype(int)
+        df["TargetLocation"] = None
+        df["TargetSeverity_raw"] = None
+        df["TargetSeverity"] = 0
+        return df
+
+    raise ValueError(
+        f"Unsupported cfg.data.target_mode='{target_mode}'. "
+        "Use 'finding', 'column', or 'any_abnormality'."
+    )
+
+
 def _load_metadata(cfg):
     """
     Loads a metadata dataframe from a CSV file and performs the following operations:
         - Filters by the specified organ
-        - Extracts the location and severity of hypertrophy from the 'liver_findings_microscopy' column
-        - Creates a column 'HasHypertrophy' indicating the presence of hypertrophy
-        - Creates a column 'Location' containing the location of hypertrophy
-        - Creates a column 'Severity_raw' containing the raw severity of hypertrophy
-        - Creates a column 'Severity' containing the normalized severity of hypertrophy
+        - Builds target columns from either a parsed finding or a metadata column
+        - Creates generic columns:
+          'TargetLabel', 'TargetLocation', 'TargetSeverity_raw', 'TargetSeverity'
 
     :param cfg: the experiment configuration
     :return: a parsed metadata dataframe
@@ -164,12 +300,7 @@ def _load_metadata(cfg):
             )
 
 
-    parsed = df.apply(_extract_hypertrophy_location_severity, axis=1)
-
-    df["HasHypertrophy"] = parsed.apply(lambda x: x[0])
-    df["Location"] = parsed.apply(lambda x: x[1])
-    df["Severity_raw"] = parsed.apply(lambda x: x[2])
-    df["Severity"] = df["Severity_raw"].apply(_normalize_severity)
+    df = _apply_target_definition(df, cfg)
 
     print(f"[INFO] Loaded {len(df)} samples from {cfg.data.metadata_csv}")
     return df
@@ -348,7 +479,7 @@ def prepare_dataset_inputs(cfg):
       - 'data': a dictionary containing:
           - 'df': the filtered metadata dataframe
           - 'ids': a list of slide or animal IDs
-          - 'labels': a list of labels (HasHypertrophy)
+          - 'labels': a list of binary target labels
           - 'num_classes': the number of classes
           - 'severity': a list of severity labels
           - 'location': a list of location labels
@@ -371,6 +502,7 @@ def prepare_dataset_inputs(cfg):
 
     dirs = _select_feature_dirs(cfg)
     ftype = cfg.features.feature_type
+    feature_bank_payload = {}
 
     if ftype == "animal":
         ids = df["subject_organ_UID"].astype(str).tolist()
@@ -379,7 +511,10 @@ def prepare_dataset_inputs(cfg):
         ids = df["slide_id"].astype(str).tolist()
         features_dir = dirs["slide_dir"]
 
-    labels = df["HasHypertrophy"].tolist()
+    if feature_bank_enabled(cfg):
+        feature_bank_payload = resolve_prepared_feature_bank(cfg, df)
+
+    labels = df["TargetLabel"].tolist()
 
     return {
         "data": {
@@ -387,15 +522,19 @@ def prepare_dataset_inputs(cfg):
             "ids": ids,
             "labels": labels,
             "num_classes": len(set(labels)),
-            "severity": df["Severity"].tolist(),
-            "location": df["Location"].tolist(),
+            "severity": df["TargetSeverity"].tolist(),
+            "location": df["TargetLocation"].tolist(),
             "dataset": cfg.datasets.name,
+            "target_mode": getattr(cfg.data, "target_mode", "finding"),
+            "target_finding": getattr(cfg.data, "target_finding", None),
+            "target_column": getattr(cfg.data, "target_column", None),
 
             # directories
             "raw_slide_dir": dirs["raw_slide_dir"],
             "slide_dir": dirs["slide_dir"],
             "animal_dir": dirs["animal_dir"],
             "features_dir": features_dir,
+            **feature_bank_payload,
 
             # meta
             "split": cfg.datasets.split,
@@ -429,5 +568,15 @@ def prepare_dataset_inputs(cfg):
             "hidden_dim": cfg.probe.hidden_dim,
             "num_layers": cfg.probe.num_layers,
             "knn_neighbors": cfg.probe.knn_neighbors,
+
+            # flow specific
+            "flow_input_dim": getattr(cfg.probe, "flow_input_dim", None),
+            "flow_layers": getattr(cfg.probe, "flow_layers", None),
+            "flow_hidden": getattr(cfg.probe, "flow_hidden", None),
+
+            "flow_train_max_tiles": getattr(cfg.probe, "flow_train_max_tiles", None),
+            "flow_topk_frac": getattr(cfg.probe, "flow_topk_frac", None),
+            "flow_tau_percentile": getattr(cfg.probe, "flow_tau_percentile", None),
+            "flow_pca_fit_max_tiles": getattr(cfg.probe, "flow_pca_fit_max_tiles", None),
         },
     }

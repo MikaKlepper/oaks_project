@@ -1,11 +1,23 @@
 # Base configuration for the OAKS Toxicology Pipeline
 
-experiment_root: "outputs/MICCAI_final_experiments_benchmark_final/${datasets.name}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}"
+experiment_root: "outputs/MICCAI_final_experiments_benchmark_final/${datasets.name}/${data.target_task}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}/${experiment.tag}"
 
 data:
   project_root: "/data/temporary/mika/repos/oaks_project"
   data_root: "/data/temporary/mika/repos/oaks_project/splitting_data"
   organ: "Liver"
+  metadata_csv: "/data/pa_cpgarchive/archives/toxicology/open-tg-gates/metadata_SD/open_tggates_master_list.csv"
+  splits_dir: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/latest"
+
+  # High-level prediction target. The concrete label source is inferred
+  # automatically per dataset in utils/config_loader.py.
+  target_task: "liver_hypertrophy"   # ["liver_hypertrophy", "any_abnormality"]
+
+  # Resolved automatically. Keep null unless you want to override manually.
+  target_mode: null
+  target_finding: null
+  target_column: null
+  target_positive_value: null
 
 datasets:
   name: "tggates"        # canonical dataset key (tggates | ucb)
@@ -15,9 +27,20 @@ datasets:
   subset_fraction: null
 
 features:
-  encoder: "UNI"
-  features_root: "/data/temporary/toxicology"   # true base anchor
+  # backend: "legacy"   # ["legacy", "feature_bank"]
+  backend: "feature_bank"
+  encoder: "H_OPTIMUS_1"
+  # features_root: "/data/temporary/toxicology"   # true base anchor
+  features_root: "/local/features"   # for using node mounted features on compute cluster
+  # bank_root: "feature_bank"
+  bank_root: "/data/temporary/mika/repos/oaks_project/feature_bank"
+  # registry_path: null
+  registry_path: "/tmp/features.sqlite"
+  local_bank_root: "/local/feature_bank"
+  prefer_local_mirror: true
+
   cache_root: "/data/temporary/mika/repos/oaks_project/pipeline/outputs/cache"
+  slide_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/{encoder}/features"
 
   feature_type: "animal"   # ["animal", "slide"]
   use_cache: false
@@ -33,6 +56,17 @@ probe:
   num_layers: null
   knn_neighbors: 5
 
+   # flow-specific params
+  flow_input_dim: 32
+  flow_layers: 8
+  flow_hidden: 128
+
+  # optional (but useful)
+  flow_train_max_tiles: 5000
+  flow_topk_frac: 0.4
+  flow_tau_percentile: 95
+  flow_pca_fit_max_tiles: 200000
+
 fewshot:
   k: null
 
@@ -47,3 +81,22 @@ runtime:
   momentum: 0.9
   loss: "crossentropy"
   device: "cuda"
+
+splitting:
+  num_repeats: 1000
+  summary_csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Splits/latest/split_summary.csv"
+  generated_root: "outputs/generated_splits"
+
+experiment:
+  tag: "auto"
+
+experiment_registry:
+  path: "outputs/registry/experiment_runs.csv"
+
+calibration:
+  enabled: false
+  base_dataset: "tggates"
+  init_from_base: true
+  num_samples: null
+  source_csv: null
+  seed: 42

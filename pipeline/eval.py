@@ -22,6 +22,7 @@ from metrics import compute_and_log_metrics
 from logger import setup_logger
 from log_benchmark import log_benchmark
 from eval_analysis import run_misclassification_analysis
+from utils.experiment_registry import append_experiment_row
 
 def build_train_experiment_root(cfg):
     """
@@ -73,12 +74,12 @@ def run_eval(cfg):
     #             "and subset consistency checks"
     #         )
 
-    if probe_type not in {"abmil", "clam", "dsmil"}:
+    if probe_type not in {"abmil", "clam", "dsmil", "flow"}:
             ensure_cached_features(prepared)
             # check_subset_consistency(prepared)
 
    # create dataset and collate_fn based on probe type
-    if probe_type in {"abmil", "clam", "dsmil"}:
+    if probe_type in {"abmil", "clam", "dsmil", "flow"}:
         dataset = ToxicologyMILDataset(prepared)
         collate_fn = collate_mil
     else:
@@ -138,6 +139,17 @@ def run_eval(cfg):
     )
 
     log_benchmark(cfg, metrics)
+    registry_path = append_experiment_row(
+        cfg,
+        prepared,
+        stage=stage,
+        status="completed",
+        exp_root=exp_root,
+        metrics=metrics,
+        checkpoint_path=ckpt_path,
+        metrics_path=stage_dir / "metrics" / "metrics.json",
+    )
+    logging.info(f"[Eval] Updated experiment registry -> {registry_path}")
 
     logging.info(f"[{stage.upper()}] Final metrics -> {metrics}")
     logging.info(f"========== {stage.upper()} DONE ==========")

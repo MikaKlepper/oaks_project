@@ -7,6 +7,7 @@ data:
   root: /data/temporary/mika/repos/oaks_project/splitting_data
   metadata_csv: /data/pa_cpgarchive/archives/toxicology/open-tg-gates/metadata_SD/open_tggates_master_list.csv
   organ: Liver
+  splits_dir: /data/temporary/mika/repos/oaks_project/splitting_data/Splits/latest
 
 datasets:
   use_subset: true    # if true → use subset csv, otherwise full train/val/test

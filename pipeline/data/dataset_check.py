@@ -43,7 +43,20 @@ def load_ids(csv_path):
         return set()
 
     df = pd.read_csv(csv_path)
-    col = "slide_id" if "slide_id" in df.columns else "subject_organ_UID"
+    if "slide_id" in df.columns:
+        col = "slide_id"
+    elif "subject_organ_UID" in df.columns:
+        col = "subject_organ_UID"
+    elif "animal_number" in df.columns:
+        col = "animal_number"
+    elif "slide_filename" in df.columns:
+        col = "slide_filename"
+        df[col] = df[col].astype(str).map(lambda x: Path(x).stem)
+    else:
+        raise ValueError(
+            f"Could not infer ID column from subset CSV: {csv_path}. "
+            "Expected one of slide_id, subject_organ_UID, animal_number, slide_filename."
+        )
     return {norm(x) for x in df[col].astype(str)}
 
 
@@ -135,7 +148,11 @@ def check_subset_consistency(prepared):
         print("[OK] Metadata consistency check passed")
 
     # check if feature files are present
-    feats = feature_ids(data["features_dir"])
+    if data.get("feature_backend") == "feature_bank":
+        artifact_map = data.get("feature_artifacts") or data.get("raw_feature_artifacts") or {}
+        feats = {norm(k) for k in artifact_map.keys()}
+    else:
+        feats = feature_ids(data["features_dir"])
     missing = dataset_ids - feats
 
     print(f"[INFO] Found {len(feats)} feature vectors")

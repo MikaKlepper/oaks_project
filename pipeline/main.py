@@ -16,10 +16,10 @@ TEST_ONLY_DATASETS = {"ucb"}
 REAL_STAGES = {"train", "eval", "test"}
 
 
-def resolve_stages(requested_stage: str, dataset: str):
+def resolve_stages(requested_stage: str, dataset: str, calibration_enabled: bool = False):
     if requested_stage == "all":
         if dataset in TEST_ONLY_DATASETS:
-            return ["test"]
+            return ["train", "test"] if calibration_enabled else ["test"]
         return ["train", "eval"] # test will be done in benchmark.py, so we skip it here
     return [requested_stage]
 
@@ -62,7 +62,11 @@ def main():
 
     setup_logger(exp_root)
 
-    stages = resolve_stages(args.stage, dataset) # ["train", "eval", "test"]
+    stages = resolve_stages(
+        args.stage,
+        dataset,
+        calibration_enabled=bool(cfg_preview.calibration.enabled),
+    )
 
     logging.info("========== MAIN ==========")
     logging.info(f"[MAIN] Dataset: {dataset}")
