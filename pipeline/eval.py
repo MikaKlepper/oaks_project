@@ -9,7 +9,6 @@ import torch
 
 from argparser import get_args
 from utils.config_loader import load_merged_config
-from utils.feature_cache import ensure_cached_features
 from data.prepare_dataset import prepare_dataset_inputs
 from data.create_datasets import ToxicologyDataset
 from data.dataset_check import check_subset_consistency
@@ -24,17 +23,26 @@ from log_benchmark import log_benchmark
 from eval_analysis import run_misclassification_analysis
 from utils.experiment_registry import append_experiment_row
 
+
 def build_train_experiment_root(cfg):
     """
     Build the experiment root corresponding to the TRAINING dataset,
     keeping aggregation / encoder / probe / k identical.
     """
+    if cfg.calibration.enabled:
+        return Path(cfg.experiment_root)
     return Path(
         str(cfg.experiment_root).replace(
             f"/{cfg.datasets.name}/",
             f"/{cfg.datasets.train_name}/"
         )
     )
+
+
+def _stage_base_dir(exp_root: Path, stage: str, dataset_name: str) -> Path:
+    if stage == "test":
+        return exp_root / "testing" / dataset_name
+    return exp_root / "validation"
 
 
 def run_eval(cfg):
@@ -47,38 +55,23 @@ def run_eval(cfg):
     stage = cfg.stage  # "eval" or "test"
     dataset_name = cfg.datasets.name
 
-    # Separate output dir for test datasets
-    # test can have multiple sets while eval is always on tggates val
-    if stage == "test":
-        stage_dir = exp_root / stage / dataset_name
-    else:
-        stage_dir = exp_root / stage
-
+    stage_dir = _stage_base_dir(exp_root, stage, dataset_name)
     stage_dir.mkdir(parents=True, exist_ok=True)
 
     setup_logger(exp_root=stage_dir)
     logging.info(f"========== {stage.upper()} ==========")
     logging.info(f"[Eval] Dataset: {dataset_name}")
     logging.info(f"[Eval] Split: {cfg.datasets.split}")
+    logging.info(f"[Eval] Output dir: {stage_dir}")
 
     prepared = prepare_dataset_inputs(cfg)
     probe_type = prepared["probe"]["type"].lower()
 
-    # if probe_type not in {"abmil", "clam", "dsmil"}:
-    #     if dataset_name == "tggates":
-    #         ensure_cached_features(prepared)
-    #         check_subset_consistency(prepared)
-    #     else:
-    #         logging.info(
-    #             "[Eval] Test-only dataset detected -> skipping feature caching "
-    #             "and subset consistency checks"
-    #         )
-
     if probe_type not in {"abmil", "clam", "dsmil", "flow"}:
-            ensure_cached_features(prepared)
-            # check_subset_consistency(prepared)
+        # Keep this lightweight check for pooled probes.
+        check_subset_consistency(prepared)
 
-   # create dataset and collate_fn based on probe type
+    # create dataset and collate_fn based on probe type
     if probe_type in {"abmil", "clam", "dsmil", "flow"}:
         dataset = ToxicologyMILDataset(prepared)
         collate_fn = collate_mil
@@ -88,7 +81,7 @@ def run_eval(cfg):
 
     data = prepared["data"]
 
-   # build probe and load checkpoint
+    # build probe and load checkpoint
     probe = build_probe(
         prepared,
         input_dim=data["embed_dim"],
@@ -138,7 +131,6 @@ def run_eval(cfg):
         class_names=["No Hypertrophy", "Hypertrophy"],
     )
 
-    log_benchmark(cfg, metrics)
     registry_path = append_experiment_row(
         cfg,
         prepared,
@@ -149,6 +141,7 @@ def run_eval(cfg):
         checkpoint_path=ckpt_path,
         metrics_path=stage_dir / "metrics" / "metrics.json",
     )
+    log_benchmark(cfg, metrics, registry_path=registry_path)
     logging.info(f"[Eval] Updated experiment registry -> {registry_path}")
 
     logging.info(f"[{stage.upper()}] Final metrics -> {metrics}")

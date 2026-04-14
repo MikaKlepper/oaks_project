@@ -6,6 +6,8 @@ import yaml
 
 # helper functions
 
+DEFAULT_SEED = 42
+
 # 1: load yaml
 def load_yaml_config(path):
     with open(path, "r") as f:
@@ -44,7 +46,7 @@ def export_WSI_paths(subset_csv, output_dir):
 
 
 # 3: per-compound compute how many samples to take
-def per_compound_targets(compounds, k, seed=42):
+def per_compound_targets(compounds, k, seed=DEFAULT_SEED):
     n = len(compounds)
     if n == 0:
         raise ValueError("No compounds found in dataset.")
@@ -58,7 +60,7 @@ def per_compound_targets(compounds, k, seed=42):
 
 
 # 4: grow cumulative subset up to MAX k 
-def grow_to_k(df_full, used_df, k, seed=42):
+def grow_to_k(df_full, used_df, k, seed=DEFAULT_SEED):
     df_unique = df_full.drop_duplicates(subset=["subject_UID"])
     compounds = df_unique["COMPOUND_NAME"].unique()
     targets = per_compound_targets(compounds, k, seed)
@@ -104,6 +106,7 @@ def grow_to_k(df_full, used_df, k, seed=42):
 # 5: main few-shot subset creation
 def create_fewshot_compound_balanced(config_path, ks=[5, 10, 20, 40, 80, 100]):
     config = load_yaml_config(config_path)
+    seed = config.get("runtime", {}).get("seed", DEFAULT_SEED)
     train_csv = config["datasets"]["train"]
     df = pd.read_csv(train_csv)
 
@@ -127,10 +130,10 @@ def create_fewshot_compound_balanced(config_path, ks=[5, 10, 20, 40, 80, 100]):
     for k in ks:
         print(f"\n--- Creating cumulative few-shot subset for k={k} ---")
 
-        used_pos = grow_to_k(pos_df, used_pos, k, seed=42)
-        used_neg = grow_to_k(neg_df, used_neg, k, seed=42)
+        used_pos = grow_to_k(pos_df, used_pos, k, seed=seed)
+        used_neg = grow_to_k(neg_df, used_neg, k, seed=seed)
 
-        combined = pd.concat([used_pos, used_neg]).sample(frac=1, random_state=42)
+        combined = pd.concat([used_pos, used_neg]).sample(frac=1, random_state=seed)
 
         output_csv = out_dir / f"train_fewshot_k{k}.csv"
         combined.to_csv(output_csv, index=False)

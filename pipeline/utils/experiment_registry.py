@@ -7,18 +7,32 @@ import pandas as pd
 
 
 EXPERIMENT_KEY_COLUMNS = [
-    "stage",
+    "encoder",
+    "aggregation",
+    "probe",
+    "k_shot",
     "dataset",
     "target_task",
     "experiment_tag",
-    "encoder",
-    "probe",
-    "k_shot",
+    "stage",
     "feature_type",
     "split",
     "calibration_enabled",
     "calibration_samples",
     "calibration_seed",
+]
+
+METRIC_COLUMNS = ("accuracy", "precision", "recall", "f1", "roc_auc")
+PREFERRED_COLUMN_ORDER = [
+    "encoder",
+    "aggregation",
+    "probe",
+    "k_shot",
+    "roc_auc",
+    "stage",
+    "dataset",
+    "target_task",
+    "experiment_tag",
 ]
 
 
@@ -29,13 +43,42 @@ def _registry_path(cfg) -> Path:
     return Path("outputs") / "registry" / "experiment_runs.csv"
 
 
-def _artifact_counts(prepared) -> tuple[int | None, int | None]:
+def _feature_entry_counts(prepared) -> tuple[int | None, int | None]:
     data = prepared["data"]
-    raw_artifacts = data.get("raw_feature_artifacts")
-    derived_artifacts = data.get("feature_artifacts")
-    raw_count = len(raw_artifacts) if raw_artifacts is not None else None
-    derived_count = len(derived_artifacts) if derived_artifacts is not None else None
+    raw_entries = data.get("raw_feature_entries")
+    derived_entries = data.get("feature_entries")
+    raw_count = len(raw_entries) if raw_entries is not None else None
+    derived_count = len(derived_entries) if derived_entries is not None else None
     return raw_count, derived_count
+
+
+def _load_registry(out_path: Path, columns: list[str]) -> pd.DataFrame:
+    if out_path.exists():
+        df = pd.read_csv(out_path)
+    else:
+        df = pd.DataFrame(columns=columns)
+
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None
+    return df
+
+
+def _ordered_columns(columns: list[str]) -> list[str]:
+    ordered = [col for col in PREFERRED_COLUMN_ORDER if col in columns]
+    ordered += [col for col in columns if col not in ordered]
+    return ordered
+
+
+def _row_match_mask(df: pd.DataFrame, row: dict, keys: list[str]) -> pd.Series:
+    mask = pd.Series([True] * len(df))
+    for col in keys:
+        target = row[col]
+        if target is None:
+            mask &= df[col].isna()
+        else:
+            mask &= df[col].astype(str) == str(target)
+    return mask
 
 
 def build_experiment_row(
@@ -52,26 +95,30 @@ def build_experiment_row(
     data = prepared["data"]
     runtime = prepared["runtime"]
     probe = prepared["probe"]
-    raw_count, derived_count = _artifact_counts(prepared)
+    raw_count, derived_count = _feature_entry_counts(prepared)
 
     row = {
-        "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
-        "stage": stage,
-        "status": status,
+        "encoder": cfg.features.encoder,
+        "aggregation": cfg.aggregation.type,
+        "probe": cfg.probe.type,
+        "k_shot": cfg.fewshot.get("k"),
         "dataset": cfg.datasets.name,
-        "train_dataset": cfg.datasets.get("train_name", cfg.datasets.name),
         "target_task": cfg.data.target_task,
+        "experiment_tag": cfg.experiment.tag,
+        "stage": stage,
+        "feature_type": cfg.features.feature_type,
+        "split": cfg.datasets.split,
+        "calibration_enabled": bool(cfg.calibration.get("enabled", False)),
+        "calibration_samples": cfg.calibration.get("num_samples"),
+        "calibration_seed": cfg.calibration.get("seed"),
+        "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+        "train_dataset": cfg.datasets.get("train_name", cfg.datasets.name),
         "target_mode": cfg.data.get("target_mode"),
         "target_finding": cfg.data.get("target_finding"),
         "target_column": cfg.data.get("target_column"),
-        "experiment_tag": cfg.experiment.tag,
         "experiment_root": str(exp_root),
-        "encoder": cfg.features.encoder,
-        "probe": cfg.probe.type,
-        "feature_type": cfg.features.feature_type,
-        "feature_backend": data.get("feature_backend", "legacy"),
-        "aggregation": cfg.aggregation.type,
-        "split": cfg.datasets.split,
+        "feature_backend": data.get("feature_backend", "feature_bank"),
         "subset_csv": str(data.get("subset_csv")) if data.get("subset_csv") else None,
         "train_csv": str(data.get("train_csv")) if data.get("train_csv") else None,
         "val_csv": str(data.get("val_csv")) if data.get("val_csv") else None,
@@ -79,15 +126,11 @@ def build_experiment_row(
         "registry_path": data.get("feature_registry_path"),
         "feature_bank_root": data.get("feature_bank_root"),
         "feature_bank_local_root": data.get("feature_bank_local_root"),
-        "raw_slide_dir": str(data.get("raw_slide_dir")) if data.get("raw_slide_dir") else None,
-        "slide_dir": str(data.get("slide_dir")) if data.get("slide_dir") else None,
-        "animal_dir": str(data.get("animal_dir")) if data.get("animal_dir") else None,
-        "resolved_raw_artifact_count": raw_count,
-        "resolved_feature_artifact_count": derived_count,
+        "resolved_raw_feature_entry_count": raw_count,
+        "resolved_feature_entry_count": derived_count,
         "num_samples": len(data.get("ids", [])),
         "num_classes": data.get("num_classes"),
         "embed_dim": data.get("embed_dim"),
-        "k_shot": cfg.fewshot.get("k"),
         "batch_size": runtime.get("batch_size"),
         "epochs": runtime.get("epochs"),
         "lr": runtime.get("lr"),
@@ -106,27 +149,14 @@ def build_experiment_row(
         "flow_topk_frac": probe.get("flow_topk_frac"),
         "flow_tau_percentile": probe.get("flow_tau_percentile"),
         "flow_pca_fit_max_tiles": probe.get("flow_pca_fit_max_tiles"),
-        "calibration_enabled": bool(cfg.calibration.get("enabled", False)),
-        "calibration_samples": cfg.calibration.get("num_samples"),
-        "calibration_seed": cfg.calibration.get("seed"),
+        "calibration_base_dataset": cfg.calibration.get("base_dataset"),
+        "calibration_init_from_base": cfg.calibration.get("init_from_base"),
         "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
         "metrics_path": str(metrics_path) if metrics_path else None,
-        "accuracy": None,
-        "precision": None,
-        "recall": None,
-        "f1": None,
-        "roc_auc": None,
+        **{k: None for k in METRIC_COLUMNS},
     }
     if metrics is not None:
-        row.update(
-            {
-                "accuracy": metrics.get("accuracy"),
-                "precision": metrics.get("precision"),
-                "recall": metrics.get("recall"),
-                "f1": metrics.get("f1"),
-                "roc_auc": metrics.get("roc_auc"),
-            }
-        )
+        row.update({k: metrics.get(k) for k in METRIC_COLUMNS})
     return row
 
 
@@ -154,29 +184,17 @@ def append_experiment_row(
     out_path = _registry_path(cfg)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if out_path.exists():
-        df = pd.read_csv(out_path)
-    else:
-        df = pd.DataFrame(columns=row.keys())
-
-    for col in row.keys():
-        if col not in df.columns:
-            df[col] = None
-
-    key_mask = pd.Series([True] * len(df))
-    for col in EXPERIMENT_KEY_COLUMNS:
-        target = row[col]
-        if target is None:
-            key_mask &= df[col].isna()
-        else:
-            key_mask &= df[col].astype(str) == str(target)
+    row_columns = list(row.keys())
+    df = _load_registry(out_path, row_columns)
+    key_mask = _row_match_mask(df, row, EXPERIMENT_KEY_COLUMNS)
 
     matches = df.index[key_mask]
     if len(matches) > 0:
-        df.loc[matches[0], list(row.keys())] = list(row.values())
+        df.loc[matches[0], row_columns] = [row[c] for c in row_columns]
     else:
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
 
+    df = df[_ordered_columns(list(df.columns))]
     df.to_csv(out_path, index=False)
     return out_path
 
@@ -221,15 +239,15 @@ def experiment_run_exists(
             df[col] = default
 
     mask = (
-        (df["stage"].astype(str) == str(stage)) &
-        (df["dataset"].astype(str) == str(dataset)) &
-        (df["target_task"].astype(str) == str(target_task)) &
-        (df["experiment_tag"].astype(str) == str(experiment_tag)) &
-        (df["encoder"].astype(str) == str(encoder)) &
-        (df["probe"].astype(str) == str(probe)) &
-        (df["feature_type"].astype(str) == str(feature_type)) &
-        (df["aggregation"].astype(str) == str(aggregation)) &
-        (df["calibration_enabled"].fillna(False).astype(bool) == bool(calibration_enabled))
+        (df["stage"].astype(str) == str(stage))
+        & (df["dataset"].astype(str) == str(dataset))
+        & (df["target_task"].astype(str) == str(target_task))
+        & (df["experiment_tag"].astype(str) == str(experiment_tag))
+        & (df["encoder"].astype(str) == str(encoder))
+        & (df["probe"].astype(str) == str(probe))
+        & (df["feature_type"].astype(str) == str(feature_type))
+        & (df["aggregation"].astype(str) == str(aggregation))
+        & (df["calibration_enabled"].fillna(False).astype(bool) == bool(calibration_enabled))
     )
 
     if k_shot is None:

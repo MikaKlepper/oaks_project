@@ -1,5 +1,6 @@
 #csv: "/data/temporary/mika/repos/oaks_project/splitting_data/Subsets/val_balanced_subset_paths.csv"
-csv: "/data/temporary/mika/repos/oaks_project/pipeline/missing_wsi_paths_part_3.csv"
+# csv: "/data/temporary/mika/repos/oaks_project/pipeline/missing_wsi_paths_part_3.csv"
+csv:  "/data/temporary/mika/repos/oaks_project/pipeline/missing_slide.csv"
 # output_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # output directory
 # resume: true # resume from a previous run
 # resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/H_OPTIMUS_1" # directory name to resume from
@@ -7,7 +8,7 @@ csv: "/data/temporary/mika/repos/oaks_project/pipeline/missing_wsi_paths_part_3.
 
 output_dir: "/scratch_mikaklepper_tg_gates/outputs/H_OPTIMUS_1"
 # resume_dirname: "/data/temporary/toxicology/UCB/liver/Features_FM/H_OPTIMUS_1"
-resume_dirname: "/data/temporary/toxicology/TG-GATES/Missing_slides_FM/features_part_3/H_OPTIMUS_1"
+resume_dirname: "/data/temporary/toxicology/TG-GATES/Missing_slides_FM/features_part_missing_slide/H_OPTIMUS_1"
 resume: true  # resume from a previous run if outputs already exist
 # resume_dirname: "/data/temporary/toxicology/TG-GATES/liver/Tests_UCB_FM/H_OPTIMUS_1_" # scratch directory to resume from
 

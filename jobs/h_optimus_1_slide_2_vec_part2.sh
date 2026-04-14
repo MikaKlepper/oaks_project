@@ -27,12 +27,7 @@ mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
 # --------------------------------------------------
 # HuggingFace cache on scratch
 # --------------------------------------------------
-
-export HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}"
-if [ -z "$HF_TOKEN" ]; then
-  echo "HF_TOKEN is not set. Export HF_TOKEN or HUGGINGFACE_HUB_TOKEN before running."
-  exit 1
-fi
+export HF_TOKEN="${HF_TOKEN:-}"
 
 export HOME="$SCRATCH_BASE"
 export HF_HOME="$SCRATCH_BASE/hf_cache"

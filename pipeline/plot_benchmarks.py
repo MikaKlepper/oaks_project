@@ -285,6 +285,10 @@ def generate_heatmaps(df, out_dir: Path, agg: str):
     plt.close()
 
 
+def _stage_dir(stage: str) -> str:
+    return "validation" if stage == "eval" else "testing"
+
+
 def run_all_plots(agg: str, stage: str, dataset: str):
     """
     Plots all relevant figures for the given aggregation.
@@ -302,13 +306,13 @@ def run_all_plots(agg: str, stage: str, dataset: str):
     -------
     None
     """
-    benchmark_file = Path("outputs") / stage / dataset / f"{agg}_benchmark_results.csv"
+    benchmark_file = Path("outputs") / _stage_dir(stage) / dataset / f"{agg}_benchmark_results.csv"
     if not benchmark_file.exists():
         print(f"[ERROR] Missing benchmark file: {benchmark_file}")
         return
 
     df = pd.read_csv(benchmark_file)
-    out_dir = Path("outputs") / stage / dataset / agg
+    out_dir = Path("outputs") / _stage_dir(stage) / dataset / agg
     out_dir.mkdir(parents=True, exist_ok=True)
 
     plot_learning_curve(df, out_dir, agg)
@@ -333,7 +337,7 @@ def combine_mil_and_mean(stage: str, dataset: str):
     -------
     None
     """
-    base_dir = Path("outputs") / stage / dataset
+    base_dir = Path("outputs") / _stage_dir(stage) / dataset
     mean_file = base_dir / "mean_benchmark_results.csv"
     mil_file = base_dir / "MIL_benchmark_results.csv"
 
@@ -367,12 +371,12 @@ def run_all_plots_combined(stage: str, dataset: str):
     -------
     None
     """
-    combined_file = Path("outputs") / stage / dataset / "combined_benchmark_results.csv"
+    combined_file = Path("outputs") / _stage_dir(stage) / dataset / "combined_benchmark_results.csv"
     if not combined_file.exists():
         return
 
     df = pd.read_csv(combined_file).drop(columns=["agg"], errors="ignore")
-    out_dir = Path("outputs") / stage / dataset / "combined"
+    out_dir = Path("outputs") / _stage_dir(stage) / dataset / "combined"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     plot_learning_curve(df, out_dir, agg="combined")

@@ -17,9 +17,6 @@ class FeatureBankRegistry:
         self.local_bank_root = Path(local_bank_root) if local_bank_root else None
         self.prefer_local = prefer_local
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
-
     def _materialize_path(self, relative_path: str) -> Path:
         shared_path = self.shared_bank_root / relative_path
         if self.prefer_local and self.local_bank_root is not None:
@@ -28,7 +25,14 @@ class FeatureBankRegistry:
                 return local_path
         return shared_path
 
-    def resolve_artifacts(
+    def _query_entries(self, query: str, params: list) -> tuple[list[tuple], list[str]]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, params)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+        return rows, columns
+
+    def resolve_feature_entries(
         self,
         *,
         dataset: str,
@@ -75,9 +79,7 @@ class FeatureBankRegistry:
             *normalized_ids,
         ]
 
-        with self._connect() as conn:
-            rows = conn.execute(query, params).fetchall()
-            columns = [desc[0] for desc in conn.execute(query, params).description]
+        rows, columns = self._query_entries(query, params)
 
         result: dict[str, dict] = {}
         for row in rows:

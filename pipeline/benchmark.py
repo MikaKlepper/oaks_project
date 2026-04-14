@@ -1,14 +1,13 @@
-import os
 import subprocess
 import sys
 from pathlib import Path
 import time
-import pandas as pd
 
 from utils.experiment_registry import experiment_run_exists
 
 BASE_CONFIG = "configs/base_config.yaml"
 TEST_ONLY_DATASETS = {"ucb"}
+MIL_PROBES = {"abmil", "clam", "dsmil", "flow"}
 
 # ENCODERS = [
 #     "CONCH",
@@ -33,6 +32,7 @@ TEST_ONLY_DATASETS = {"ucb"}
 ENCODERS =["H_OPTIMUS_1"]  # for quick testing, focus on one encoder]
 TARGETS = ["liver_hypertrophy", "any_abnormality"]
 CALIBRATION_SAMPLES = [5, 10, 25, 50]
+CALIBRATION_ONLY = True
 
 # PROBES = [
 #     "linear",
@@ -46,167 +46,65 @@ CALIBRATION_SAMPLES = [5, 10, 25, 50]
 #     "dsmil",
 #     "flow",
 # ]
-PROBES = ["linear", "flow"]
+PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf", "flow"]
 
 # K_VALUES = [100, 80, 40, 20, 10, 5, 1]
-# K_VALUES =[2953]  # for quick testing, use all training samples for tggates
+# K_VALUES = [2953]  # for quick testing, use all training samples for tggates
 # K_VALUES = [2953, 100, 80, 40, 20, 10, 5, 1]
-K_VALUES = [100]  # for quick testing, skip the all-sample setting
+K_VALUES = ["full", 100]  # full train split + k-shot
 # AGGREGATION_METHODS = ["mean","max","min"]
-AGGREGATION_METHODS = ["mean","max","min"]
-MIL_PROBES = {"abmil", "clam", "dsmil", "flow"}
+AGGREGATION_METHODS = ["mean", "max", "min"]
 
 TEST_ENCODERS = {"H_OPTIMUS_1"}
 # TEST_K_VALUES = {100, 2953}  # 2953 = all training samples for tggates
-TEST_K_VALUES = {100}  # 2953 = all training samples for tggates
+TEST_K_VALUES = {"full", 100}  # full train split + k-shot
 TEST_NON_MIL_AGGS = {"mean"}
 DATASETS = {
     "tggates": None,
     "ucb": "/data/temporary/mika/repos/oaks_project/splitting_data/UCB/ucb_test.csv",
 }
-SMOKE_MODE = os.getenv("BENCHMARK_SMOKE", "0").lower() in {"1", "true", "yes"}
-SKIP_PLOTS = os.getenv("BENCHMARK_SKIP_PLOTS", "0").lower() in {"1", "true", "yes"}
-
-
-def load_plot_functions():
-    from plot_benchmarks import (
-        run_all_plots,
-        combine_mil_and_mean,
-        run_all_plots_combined,
-    )
-    return run_all_plots, combine_mil_and_mean, run_all_plots_combined
 
 
 def build_variants(probe, dataset, target):
-    if probe == "linear":
-        variants = [
-            {
-                "tag": "linear_baseline",
-                "cli": {
-                    "epochs": 10,
-                    "lr": 1e-4,
-                    "batch_size": 16,
-                },
-            }
-        ]
-        if dataset == "ucb" and target == "liver_hypertrophy":
-            for n in CALIBRATION_SAMPLES:
-                variants.append(
-                    {
-                        "tag": f"linear_calibration_n{n}",
-                        "cli": {
-                            "epochs": 10,
-                            "lr": 1e-4,
-                            "batch_size": 16,
-                            "calibrate": True,
-                            "calibration_samples": n,
-                            "calibration_seed": 7,
-                            "calibration_source_csv": "/data/temporary/mika/repos/oaks_project/splitting_data/UCB/ucb_test.csv",
-                        },
-                    }
-                )
-        if SMOKE_MODE and dataset == "ucb" and target == "liver_hypertrophy":
-            return [v for v in variants if v["tag"] == "linear_calibration_n5"]
-        return variants
-
+    base_cli = {"epochs": 10, "lr": 1e-4, "batch_size": 16}
     if probe == "flow":
-        variants = [
-            {
-                "tag": "flow_baseline",
-                "cli": {
-                    "epochs": 10,
-                    "lr": 1e-4,
-                    "batch_size": 16,
-                    "flow_input_dim": 32,
-                    "flow_layers": 8,
-                    "flow_hidden": 128,
-                    "flow_train_max_tiles": 5000,
-                    "flow_topk_frac": 0.4,
-                    "flow_tau_percentile": 95,
-                },
-            }
-        ]
-        if dataset == "ucb" and target == "liver_hypertrophy":
-            for n in CALIBRATION_SAMPLES:
-                variants.append(
-                    {
-                        "tag": f"flow_calibration_n{n}",
-                        "cli": {
-                            "epochs": 10,
-                            "lr": 1e-4,
-                            "batch_size": 16,
-                            "flow_input_dim": 32,
-                            "flow_layers": 8,
-                            "flow_hidden": 128,
-                            "flow_train_max_tiles": 5000,
-                            "flow_topk_frac": 0.4,
-                            "flow_tau_percentile": 95,
-                            "calibrate": True,
-                            "calibration_samples": n,
-                            "calibration_seed": 7,
-                            "calibration_source_csv": "/data/temporary/mika/repos/oaks_project/splitting_data/UCB/ucb_test.csv",
-                        },
-                    }
-                )
-        if SMOKE_MODE and dataset == "ucb" and target == "liver_hypertrophy":
-            return [v for v in variants if v["tag"] == "flow_calibration_n5"]
-        return variants
+        base_cli |= {
+            "flow_input_dim": 32,
+            "flow_layers": 8,
+            "flow_hidden": 128,
+            "flow_train_max_tiles": 5000,
+            "flow_topk_frac": 0.4,
+            "flow_tau_percentile": 95,
+        }
 
-    return [{"tag": f"{probe}_default", "cli": {}}]
+    variants = [] if CALIBRATION_ONLY else [{"tag": "default", "cli": base_cli}]
+    if dataset in {"ucb", "tggates"} and target in {"liver_hypertrophy", "any_abnormality"}:
+        if dataset == "ucb":
+            calibration_source_csv = "/data/temporary/mika/repos/oaks_project/splitting_data/UCB/ucb_test.csv"
+        else:
+            calibration_source_csv = "/data/temporary/mika/repos/oaks_project/splitting_data/TG-GATES/Splits/test.csv"
+        for n in CALIBRATION_SAMPLES:
+            calibration_cli = {
+                **base_cli,
+                "calibrate": True,
+                "calibration_samples": n,
+                "calibration_seed": 42,
+            }
+            variants.append(
+                {
+                    "tag": f"calibration_n{n}",
+                    "cli": calibration_cli,
+                }
+            )
+    return variants
 
 
 def stages_for_dataset(dataset):
     """Return stages that should be run for a dataset."""
     return ["test"] if dataset in TEST_ONLY_DATASETS else ["eval", "test"]
 
-
-def experiment_exists(model, probe, target, experiment_tag, k, agg, dataset, stage):
-    calibration_enabled = False
-    calibration_samples = None
-    calibration_seed = None
-    registry_exists = experiment_run_exists(
-        stage=stage,
-        dataset=dataset,
-        target_task=target,
-        experiment_tag=experiment_tag,
-        encoder=model,
-        probe=probe,
-        k_shot=k,
-        aggregation=agg,
-        calibration_enabled=calibration_enabled,
-        calibration_samples=calibration_samples,
-        calibration_seed=calibration_seed,
-        feature_type="animal",
-    )
-    if registry_exists:
-        return True
-
-    benchmark_file = (
-        Path("outputs")
-        / stage
-        / dataset
-        / f"{agg}_benchmark_results.csv"
-    )
-
-    if not benchmark_file.exists():
-        return False
-
-    df = pd.read_csv(benchmark_file)
-    if "target_task" not in df.columns:
-        df["target_task"] = "liver_hypertrophy"
-    if "experiment_tag" not in df.columns:
-        df["experiment_tag"] = "legacy"
-
-    match = (
-        (df["dataset"] == dataset) &
-        (df["target_task"] == target) &
-        (df["experiment_tag"] == experiment_tag) &
-        (df["encoder"] == model) &
-        (df["probe"] == probe) &
-        (df["k_shot"] == k)
-    )
-
-    return match.any()
+def _normalize_k(k):
+    return None if k in (None, "full", "all") else int(k)
 
 
 def experiment_exists_for_variant(model, probe, target, variant, k, agg, dataset, stage):
@@ -214,23 +112,20 @@ def experiment_exists_for_variant(model, probe, target, variant, k, agg, dataset
     calibration_samples = variant["cli"].get("calibration_samples")
     calibration_seed = variant["cli"].get("calibration_seed")
 
-    if experiment_run_exists(
+    return experiment_run_exists(
         stage=stage,
         dataset=dataset,
         target_task=target,
         experiment_tag=variant["tag"],
         encoder=model,
         probe=probe,
-        k_shot=k,
+        k_shot=_normalize_k(k),
         aggregation=agg,
         calibration_enabled=calibration_enabled,
         calibration_samples=calibration_samples,
         calibration_seed=calibration_seed,
         feature_type="animal",
-    ):
-        return True
-
-    return experiment_exists(model, probe, target, variant["tag"], k, agg, dataset, stage)
+    )
 
 
 def run_experiment(model, probe, target, variant, k, agg, dataset, subset_csv, stage):
@@ -243,6 +138,8 @@ def run_experiment(model, probe, target, variant, k, agg, dataset, subset_csv, s
     else:
         main_stage = "test" if stage == "test" else "all"
 
+    k_arg = _normalize_k(k)
+    k_label = "full" if k_arg is None else str(k_arg)
     cmd = [
         sys.executable,
         "main.py",
@@ -252,9 +149,10 @@ def run_experiment(model, probe, target, variant, k, agg, dataset, subset_csv, s
         "--probe", probe,
         "--target", target,
         "--experiment_tag", variant["tag"],
-        "--k", str(k),
         "--stage", main_stage,
     ]
+    if k_arg is not None:
+        cmd += ["--k", str(k_arg)]
 
     for key, value in variant["cli"].items():
         if isinstance(value, bool):
@@ -274,7 +172,7 @@ def run_experiment(model, probe, target, variant, k, agg, dataset, subset_csv, s
     print("\n====================================================")
     print(
         f"[BENCHMARK] DATASET={dataset} | STAGE={stage} | "
-        f"TARGET={target} | VARIANT={variant['tag']} | MODEL={model} | PROBE={probe} | k={k} | AGG={agg}"
+        f"TARGET={target} | VARIANT={variant['tag']} | MODEL={model} | PROBE={probe} | k={k_label} | AGG={agg}"
     )
     print("====================================================")
     print(" ".join(cmd))
@@ -283,44 +181,33 @@ def run_experiment(model, probe, target, variant, k, agg, dataset, subset_csv, s
     subprocess.run(cmd, check=True)
 
 
-def run_benchmark():
+def build_combos():
     combos = []
-    active_datasets = {"ucb": DATASETS["ucb"]} if SMOKE_MODE else DATASETS
-    active_probes = ["linear"] if SMOKE_MODE else PROBES
-    active_targets = ["liver_hypertrophy"] if SMOKE_MODE else TARGETS
-
-    if SMOKE_MODE:
-        print("[BENCHMARK] Smoke mode enabled -> running only UCB liver hypertrophy linear calibration n=5.")
+    active_datasets = DATASETS
+    active_probes = PROBES
+    active_targets = TARGETS
 
     for dataset, subset_csv in active_datasets.items():
         for stage in stages_for_dataset(dataset):
-
-            if stage == "test":
-                encoders = TEST_ENCODERS
-                k_values = TEST_K_VALUES
-            else:
-                encoders = ENCODERS
-                k_values = K_VALUES
-
+            encoders = TEST_ENCODERS if stage == "test" else ENCODERS
+            k_values = TEST_K_VALUES if stage == "test" else K_VALUES
             for model in encoders:
                 for probe in active_probes:
+                    aggs = ["MIL"] if probe in MIL_PROBES else (
+                        TEST_NON_MIL_AGGS if stage == "test" else AGGREGATION_METHODS
+                    )
                     for target in active_targets:
                         for variant in build_variants(probe, dataset, target):
                             for k in k_values:
-
-                                if probe in MIL_PROBES:
+                                for agg in aggs:
                                     combos.append(
-                                        (dataset, subset_csv, stage, model, probe, target, variant, k, "MIL")
+                                        (dataset, subset_csv, stage, model, probe, target, variant, k, agg)
                                     )
-                                else:
-                                    aggs = (
-                                        TEST_NON_MIL_AGGS if stage == "test"
-                                        else AGGREGATION_METHODS
-                                    )
-                                    for agg in aggs:
-                                        combos.append(
-                                            (dataset, subset_csv, stage, model, probe, target, variant, k, agg)
-                                        )
+    return combos, active_datasets
+
+
+def run_benchmark():
+    combos, active_datasets = build_combos()
 
     total = len(combos)
     print(f"[BENCHMARK] Total experiments: {total}")
@@ -357,14 +244,11 @@ def run_benchmark():
         )
         time.sleep(1)
 
-    if SKIP_PLOTS or SMOKE_MODE:
-        print("\n[BENCHMARK] Skipping plot generation.")
-        print("\n==============================================")
-        print("        ALL BENCHMARKING COMPLETE!")
-        print("==============================================\n")
-        return
-
-    run_all_plots, combine_mil_and_mean, run_all_plots_combined = load_plot_functions()
+    from plot_benchmarks import (
+        run_all_plots,
+        combine_mil_and_mean,
+        run_all_plots_combined,
+    )
 
     print("\n==============================================")
     print("  GENERATING BENCHMARK PLOTS")

@@ -1,0 +1,126 @@
+OAKS TOXICOLOGY PIPELINE FLOW (CURRENT)
+======================================
+
+FLOW DIAGRAM (Mermaid)
+----------------------
+flowchart TD
+  A[benchmark.py] --> B[main.py]
+  B --> C[config_loader.py]
+  C --> D[split_resolver.py]
+  C --> E[prepare_dataset.py]
+  E --> F[feature_bank_resolver.py]
+  B --> G[train.py]
+  B --> H[eval.py]
+  H --> I[log_benchmark.py]
+  I --> J[plot_benchmarks.py]
+
+  D -->|calibration ON| D1[UCB calibration subset]
+  D -->|calibration OFF| D2[TG-GATES splits]
+
+  G --> G1[checkpoint]
+  H --> H1[metrics + outputs]
+
+1) ENTRYPOINTS
+--------------
+- Single run: pipeline/main.py
+- Batch run: pipeline/benchmark.py
+
+
+2) CONFIG + RESOLUTION
+----------------------
+main.py
+  -> utils/config_loader.load_merged_config()
+     - apply CLI overrides
+     - apply dataset defaults
+     - resolve target definition (task -> labels)
+     - resolve splits (train/val/test)
+     - resolve feature bank registry + embed_dim
+     - set experiment tag
+
+
+3) SPLIT RESOLUTION (split_resolver.py)
+---------------------------------------
+- liver_hypertrophy:
+  uses legacy TG-GATES splits (splitting_data/TG-GATES/Splits)
+- any_abnormality:
+  prefers splitting_data/Splits/latest
+  falls back to generated splits
+
+Calibration ON:
+  - calibration source = UCB test CSV (hard-coded)
+  - calibration subset generated under:
+    outputs/generated_splits/ucb/calibration/<target>/n{N}_seed{seed}/
+  - TG-GATES run:
+      train uses UCB calibration train subset
+      val/test remain TG-GATES splits
+  - UCB run:
+      train uses calibration train subset
+      val/test use calibration holdout
+
+Few-shot (k) ON, calibration OFF:
+  - liver_hypertrophy:
+      uses existing train_fewshot_k*.csv
+  - any_abnormality:
+      creates new k-subset from correct train split:
+      outputs/generated_splits/<dataset>/fewshot/<target>/k{K}_seed{seed}/train.csv
+
+
+4) DATA PREP (prepare_dataset.py)
+---------------------------------
+- load metadata CSV
+- filter by split/subset CSV
+- apply target definition:
+  * finding: parse findings text
+  * column: use target_column + target_positive_value
+  * any_abnormality: derive abnormal flag
+- resolve feature entries from feature bank
+- drop missing feature rows
+- build dataset bundle
+
+
+5) TRAINING (train.py)
+----------------------
+- build dataset + probe
+- if calibration: warm-start from base checkpoint
+  * if base checkpoint missing -> train base first
+- save checkpoint to:
+  <experiment_root>/train/probe_<probe>.{pt|joblib}
+
+
+6) EVALUATION (eval.py)
+-----------------------
+- build dataset
+- load checkpoint
+  * calibration enabled -> load from current experiment root
+- run predictions + metrics
+- outputs under:
+  <experiment_root>/validation/  (for eval)
+  <experiment_root>/testing/<dataset>/ (for test)
+
+
+7) BENCHMARK LOGGING
+--------------------
+log_benchmark.py:
+  outputs/validation/<dataset>/<agg>_benchmark_results.csv
+  outputs/testing/<dataset>/<agg>_benchmark_results.csv
+
+plot_benchmarks.py:
+  outputs/validation/<dataset>/<agg>/*
+  outputs/testing/<dataset>/<agg>/*
+
+
+8) FEATURE BANK RESOLUTION
+--------------------------
+feature_bank_resolver.py:
+  - maps sample IDs to feature files
+  - returns active_feature_entries + missing_required_ids
+  - dataset used for lookup:
+      calibration train -> UCB
+      otherwise -> cfg.datasets.name
+
+
+NOTES
+-----
+- Calibration always samples from UCB.
+- Any_abnormality uses Splits/latest for eval/test.
+- Liver hypertrophy uses legacy TG-GATES splits.

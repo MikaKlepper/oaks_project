@@ -29,19 +29,16 @@ def collate_mil(batch):
         Labels of shape (B,)
     """
     bags, labels = zip(*batch)
+    batch_size = len(bags)
+    max_len = max(bag.size(0) for bag in bags)
+    emb_dim = bags[0].size(1)
 
-    lengths = [b.size(0) for b in bags]
-    max_len = max(lengths)
-    D = bags[0].size(1)
-
-    X = torch.zeros(len(bags), max_len, D)
-    mask = torch.zeros(len(bags), max_len, dtype=torch.bool)
+    X = torch.zeros(batch_size, max_len, emb_dim, dtype=bags[0].dtype)
+    mask = torch.zeros(batch_size, max_len, dtype=torch.bool)
 
     for i, bag in enumerate(bags):
-        n = bag.size(0)
-        X[i, :n] = bag
-        mask[i, :n] = True
+        length = bag.size(0)
+        X[i, :length] = bag
+        mask[i, :length] = True
 
-    y = torch.tensor(labels, dtype=torch.long)
-
-    return X, mask, y
+    return X, mask, torch.tensor(labels, dtype=torch.long)

@@ -1,14 +1,95 @@
 # utils/create_subset.py
 # Create a smaller, balanced subset CSV from the full metadata for quick experiments.
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
-import yaml
 import random
-
 from pathlib import Path
+
 import pandas as pd
+import yaml
+
+
+def _id_series(df: pd.DataFrame) -> pd.Series:
+    for column in ("subject_organ_UID", "animal_number", "slide_id", "slide_filename"):
+        if column in df.columns:
+            return df[column].astype(str)
+    raise ValueError("Subset CSV must contain a supported ID column.")
+
+
+def create_seeded_holdout_subsets(
+    source_csv,
+    *,
+    sample_size: int,
+    seed: int,
+    train_csv,
+    test_csv,
+    label_column: str | None = None,
+    positive_value=None,
+    available_ids: set[str] | None = None,
+):
+    source_csv = Path(source_csv)
+    train_csv = Path(train_csv)
+    test_csv = Path(test_csv)
+
+    if train_csv.exists() and test_csv.exists():
+        return train_csv, test_csv
+
+    df = pd.read_csv(source_csv)
+    if available_ids is not None:
+        df = df[_id_series(df).isin(available_ids)].reset_index(drop=True)
+    if sample_size <= 0 or sample_size >= len(df):
+        raise ValueError(
+            f"sample_size must be between 1 and {len(df) - 1}, got {sample_size}"
+        )
+
+    train_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    subset_df = None
+    if label_column and label_column in df.columns and sample_size > 1:
+        labels = _coerce_binary_labels(df[label_column], positive_value)
+        pos_df = df[labels == 1]
+        neg_df = df[labels == 0]
+        if not pos_df.empty and not neg_df.empty:
+            rng = random.Random(seed)
+            pos_rows = pos_df.sample(frac=1, random_state=seed).to_dict("records")
+            neg_rows = neg_df.sample(frac=1, random_state=seed).to_dict("records")
+            pos_i = neg_i = 0
+            picked = []
+            while len(picked) < sample_size and (pos_i < len(pos_rows) or neg_i < len(neg_rows)):
+                take_pos = len(picked) % 2 == 0
+                if take_pos and pos_i < len(pos_rows):
+                    picked.append(pos_rows[pos_i])
+                    pos_i += 1
+                elif not take_pos and neg_i < len(neg_rows):
+                    picked.append(neg_rows[neg_i])
+                    neg_i += 1
+                elif pos_i < len(pos_rows):
+                    picked.append(pos_rows[pos_i])
+                    pos_i += 1
+                elif neg_i < len(neg_rows):
+                    picked.append(neg_rows[neg_i])
+                    neg_i += 1
+
+            subset_df = pd.DataFrame(picked)
+            subset_df = subset_df.sample(frac=1, random_state=seed).reset_index(drop=True)
+            if len(subset_df) < sample_size:
+                print(
+                    "[WARN] Could not reach requested sample size with balanced alternation; "
+                    f"available pos={len(pos_df)} neg={len(neg_df)}."
+                )
+
+    if subset_df is None:
+        subset_df = df.sample(n=sample_size, random_state=seed).reset_index(drop=True)
+    subset_ids = set(_id_series(subset_df))
+    holdout_df = df[~_id_series(df).isin(subset_ids)].reset_index(drop=True)
+
+    subset_df.to_csv(train_csv, index=False)
+    holdout_df.to_csv(test_csv, index=False)
+    return train_csv, test_csv
+
+
+def _coerce_binary_labels(series: pd.Series, positive_value=None) -> pd.Series:
+    positive_bool = bool(positive_value) if positive_value is not None else True
+    return series.fillna(False).astype(bool).eq(positive_bool).astype(int)
 
 def export_WSI_paths(subset_csv, output_dir):
     """Extract the FILE_LOCATION column from a subset CSV and export it as a simple CSV file."""
@@ -25,7 +106,7 @@ def export_WSI_paths(subset_csv, output_dir):
 
     # Optional sanity check
     if len(wsi_paths_df) != len(subset_df):
-        print|("check if any slide IDs are missing in extraction of wsi paths")
+        print("check if any slide IDs are missing in extraction of wsi paths")
 
     # Save next to input CSV
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +160,8 @@ def create_balanced_subset(config):
         f"\nleading to {base_num_slides_per_compound} negatives per compound and a remainder of {remainder}"
     )
     # randomly assign the compounds to cover up the remainder
-    random.seed(42)
+    seed = config.get("runtime", {}).get("seed", 42)
+    random.seed(seed)
     unique_compounds = neg_df["COMPOUND_NAME"].unique()
     extra_compounds = set(random.sample(list(unique_compounds), k=min(remainder, len(unique_compounds))))
     
@@ -88,7 +170,7 @@ def create_balanced_subset(config):
     for compound, group in neg_df.groupby("COMPOUND_NAME"):
         n_to_take = base_num_slides_per_compound + (1 if compound in extra_compounds else 0)
         n_to_take = min(len(group), n_to_take)  # avoid oversampling
-        sampled_groups.append(group.sample(n=n_to_take, random_state=42)) # creates all df and put them into the list
+        sampled_groups.append(group.sample(n=n_to_take, random_state=seed)) # creates all df and put them into the list
     # concatenate all in sampled_negatives_df in a df
     sampled_negatives_df = pd.concat(sampled_groups, ignore_index=True)
 
@@ -100,19 +182,19 @@ def create_balanced_subset(config):
         if len(remaining_neg_df) == 0:
             print(" No negatives are left ")
             remaining_neg_df = neg_df
-        additional_negatives_df = remaining_neg_df.sample(n=n_missing, replace=True, random_state=42)
+        additional_negatives_df = remaining_neg_df.sample(n=n_missing, replace=True, random_state=seed)
         sampled_negatives_df = pd.concat([sampled_negatives_df, additional_negatives_df], ignore_index=True)
 
     # if we collected to many negative samples, use randomly sample over these again
     if len(sampled_negatives_df) > n_pos:
-        sampled_negatives_df = sampled_negatives_df.sample(n=n_pos, random_state=42)
+        sampled_negatives_df = sampled_negatives_df.sample(n=n_pos, random_state=seed)
 
     print(f"[INFO] Sampled {len(sampled_negatives_df)} non-hypertrophy slides after balancing by compound")
     print("[INFO] Sampled non-hypertrophy compound distribution:")
     print(sampled_negatives_df["COMPOUND_NAME"].value_counts())
 
     # combine both positive and negative samples and finally shuffle them with frac=1 in sample
-    balanced_df = (pd.concat([pos_df, sampled_negatives_df]).sample(frac=1, random_state=42).reset_index(drop=True))
+    balanced_df = (pd.concat([pos_df, sampled_negatives_df]).sample(frac=1, random_state=seed).reset_index(drop=True))
 
     print(f"[INFO] Final balanced subset has {len(balanced_df)} slides ({len(pos_df)} pos / {len(sampled_negatives_df)} neg)")
     print(f"[INFO] Final compound distribution:\n{balanced_df['COMPOUND_NAME'].value_counts().sort_index()}")

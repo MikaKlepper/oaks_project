@@ -7,6 +7,7 @@ It supports pooled feature probes and Multiple Instance Learning (MIL) methods.
 The pipeline is designed to:
 - Train and validate on **TG-GATES**
 - Perform **external out-of-distribution (OOD) evaluation** on **UCB**
+- Optional **calibration/fine-tuning** on UCB samples
 - Support few-shot learning
 - Benchmark multiple encoders and probes at scale
 - Produce reproducible metrics and plots
@@ -37,7 +38,7 @@ TG-GATES/
 
 ### UCB (external dataset)
 
-Used **only for external out-of-distribution testing**.
+Used for external out-of-distribution testing and optional calibration.
 
 Required directory structure:
 
@@ -50,40 +51,18 @@ UCB/
 Notes:
 - You do **not** need train/val/test splits for UCB
 - `ucb_test.csv` contains **all UCB samples**
-- UCB is never used for training or validation
+- UCB is used only for **test** and **calibration** (never for TG-GATES validation)
 
 ---
 
-## Feature Directory Structure
+## Feature Bank
 
-### TG-GATES
+This pipeline uses a **feature bank registry** (SQLite) to resolve features on disk.
+Configure paths in `configs/base_config.yaml`:
 
-/data/temporary/toxicology/
-TG-GATES/
-- Trainings_FM/
-  - <ENCODER>/
-    - features/
-- Validations_FM/
-  - <ENCODER>/
-    - features/
-- Tests_FM/
-  - <ENCODER>/
-    - features/
-
----
-
-### UCB
-
-/data/temporary/toxicology/
-UCB/
-- Tests_FM/
-  - <ENCODER>/
-    - features/
-
-Notes:
-- `<ENCODER>` refers to the encoder name (e.g. UNI, CONCH, VIRCHOW2)
-- The organ (e.g. Liver) is handled via metadata filtering, not directory structure
-- UCB only requires `Tests_FM`
+- `features.bank_root`
+- `features.registry_path`
+- `features.local_bank_root` (optional)
 
 ---
 
@@ -94,7 +73,8 @@ Dataset selection is explicit and reproducible:
 - `--dataset tggates` → internal training / validation / testing
 - `--dataset ucb` → external OOD testing only
 
-UCB is a **test-only** dataset and cannot be used for `stage=train` or `stage=eval`.
+UCB is a **test-only** dataset and cannot be used for `stage=train` or `stage=eval`,
+but can be used as a **calibration source**.
 
 ---
 
@@ -103,10 +83,12 @@ UCB is a **test-only** dataset and cannot be used for `stage=train` or `stage=ev
 ### Training (stage=train)
 - Uses TG-GATES
 - Uses full training split, few-shot subsets, or an explicit training subset CSV
+- If calibration is enabled, the **calibration train subset** is drawn from UCB
 
 ### Validation (stage=eval)
 - Uses TG-GATES
-- Defaults to `TG-GATES/Subsets/val_balanced_subset.csv`
+- Liver hypertrophy defaults to `TG-GATES/Splits/val.csv`
+- Any abnormality uses the resolved `Splits/latest/val.csv`
 
 ### Testing (stage=test)
 - Uses the configured dataset and subset CSV
@@ -152,6 +134,29 @@ python main.py \
 
 ---
 
+## Pipeline Flow (Diagram)
+
+```mermaid
+flowchart TD
+  A[benchmark.py] --> B[main.py]
+  B --> C[config_loader.py]
+  C --> D[split_resolver.py]
+  C --> E[prepare_dataset.py]
+  E --> F[feature_bank_resolver.py]
+  B --> G[train.py]
+  B --> H[eval.py]
+  H --> I[log_benchmark.py]
+  I --> J[plot_benchmarks.py]
+
+  D -->|calibration ON| D1[UCB calibration subset]
+  D -->|calibration OFF| D2[TG-GATES splits]
+
+  G --> G1[checkpoint]
+  H --> H1[metrics + outputs]
+```
+
+---
+
 ## Running the Full Benchmark
 
 From the repository root:
@@ -162,6 +167,7 @@ This will:
 - Train on TG-GATES
 - Validate on TG-GATES
 - Perform external OOD evaluation on UCB (if configured)
+- Run both **full** training and **k-shot** when configured in `benchmark.py`
 - Skip completed experiments automatically
 - Generate benchmark plots per dataset and stage
 
@@ -177,19 +183,24 @@ Stage outputs are stored inside the experiment root:
 
 <experiment_root>/
 - train/
-- eval/
-- test/
+- validation/
+- testing/<dataset>/
 
 Notes:
 - TG-GATES results live under TG-GATES experiment roots
 - UCB results live under UCB experiment roots (test-only)
 - Evaluation and test plots are generated separately
 
+Benchmark summaries and plots are written to:
+
+- `outputs/validation/<dataset>/...`
+- `outputs/testing/<dataset>/...`
+
 ---
 
 ## Design Guarantees
 
-- External datasets never affect training or validation
+- External datasets never affect TG-GATES validation
 - Subset CSVs fully control evaluation samples
 - No dataset leakage into model selection
 - Reproducible experiments and logging

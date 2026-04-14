@@ -1,10 +1,7 @@
 import torch
 from torch.utils.data import Dataset
-from pathlib import Path
 import h5py
 import numpy as np
-
-from data.process_slide_features import load_raw_features
 
 
 class ToxicologyMILDataset(Dataset):
@@ -19,16 +16,13 @@ class ToxicologyMILDataset(Dataset):
     """
 
     def __init__(self, prepared):
-        
         data = prepared["data"]
         df = data["df"]
 
         self.ids = list(data["ids"])
         self.labels = list(data["labels"])
 
-        self.feature_backend = data.get("feature_backend", "legacy")
-        self.raw_slide_artifacts = data.get("raw_feature_artifacts") or {}
-        self.raw_slide_dir = [data["raw_slide_dir"]]
+        self.raw_slide_entries = data.get("raw_feature_entries") or {}
         self._h5_files = {}
 
         self.embed_dim = int(data["embed_dim"])
@@ -64,36 +58,29 @@ class ToxicologyMILDataset(Dataset):
 
     def _load_slide(self, slide_id):
         """
-        Try all raw feature directories for a slide.
+        Load one raw slide bag from the feature bank.
         """
-        if self.feature_backend == "feature_bank":
-            artifact = self.raw_slide_artifacts.get(str(slide_id))
-            if artifact is None:
-                return None
+        entry = self.raw_slide_entries.get(str(slide_id))
+        if entry is None:
+            return None
 
-            h5_path = artifact["resolved_hdf5_path"]
-            h5_file = self._h5_files.get(h5_path)
-            if h5_file is None:
-                h5_file = h5py.File(h5_path, "r")
-                self._h5_files[h5_path] = h5_file
+        h5_path = entry["resolved_hdf5_path"]
+        h5_file = self._h5_files.get(h5_path)
+        if h5_file is None:
+            h5_file = h5py.File(h5_path, "r")
+            self._h5_files[h5_path] = h5_file
 
-            x = torch.from_numpy(np.asarray(h5_file[artifact["hdf5_key"]]))
-            if x.ndim == 4 and x.shape[-2:] == (1, 1):
-                x = x.squeeze(-1).squeeze(-1)
-            if x.ndim == 1:
-                x = x.unsqueeze(0)
-            elif x.ndim != 2:
-                raise ValueError(
-                    f"[ERROR] Invalid tensor shape {tuple(x.shape)} for slide {slide_id}. "
-                    "Expected (D,), (N,D), or (N,D,1,1)."
-                )
-            return x
-
-        for d in self.raw_slide_dir:
-            path = d / f"{slide_id}.pt"
-            if path.exists():
-                return load_raw_features(path)
-        return None
+        x = torch.from_numpy(np.asarray(h5_file[entry["hdf5_key"]]))
+        if x.ndim == 4 and x.shape[-2:] == (1, 1):
+            x = x.squeeze(-1).squeeze(-1)
+        if x.ndim == 1:
+            x = x.unsqueeze(0)
+        elif x.ndim != 2:
+            raise ValueError(
+                f"[ERROR] Invalid tensor shape {tuple(x.shape)} for slide {slide_id}. "
+                "Expected (D,), (N,D), or (N,D,1,1)."
+            )
+        return x
 
     def __del__(self):
         for h5_file in self._h5_files.values():
@@ -121,7 +108,7 @@ class ToxicologyMILDataset(Dataset):
         if len(tiles) == 0:
             raise RuntimeError(
                 f"[MIL] No tiles found for sample {sample_id} "
-                f"(searched {len(self.raw_slide_dir)} dirs)"
+                "(missing feature-bank raw slide entries)"
             )
 
         bag = torch.cat(tiles, dim=0)

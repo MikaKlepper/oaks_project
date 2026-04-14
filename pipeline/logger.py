@@ -54,3 +54,40 @@ def setup_logger(exp_root, level=logging.INFO):
     logger.addHandler(file_handler)
 
     logging.info(f"[Logger] Logging to {log_file}")
+
+
+def _emit_config_line(message: str) -> None:
+    logger = logging.getLogger()
+    if logger.handlers:
+        logging.info(message)
+    else:
+        print(message)
+
+
+def log_config_resolution(cfg, split_dir) -> None:
+    target_mode = cfg.data.target_mode
+    target_column = cfg.data.get("target_column")
+    target_finding = cfg.data.get("target_finding")
+    positive_value = cfg.data.get("target_positive_value")
+
+    _emit_config_line(
+        f"[Config] Dataset={cfg.datasets.name} | Split={cfg.datasets.split} | "
+        f"TargetTask={cfg.data.target_task}"
+    )
+    _emit_config_line(
+        f"[Config] Calibration -> enabled={cfg.calibration.enabled}, "
+        f"num_samples={cfg.calibration.get('num_samples')}, "
+        f"base_dataset={cfg.calibration.get('base_dataset')}, "
+        f"init_from_base={cfg.calibration.get('init_from_base')}"
+    )
+    _emit_config_line(
+        f"[Config] Target definition -> mode={target_mode}, "
+        f"column={target_column}, finding={target_finding}, positive_value={positive_value}"
+    )
+    _emit_config_line(f"[Config] Split directory -> {split_dir}")
+    _emit_config_line(f"[Config] Active subset CSV -> {cfg.datasets.get('subset_csv')}")
+    _emit_config_line("[Config] Feature backend -> feature_bank")
+    _emit_config_line(f"[Config] Feature bank root -> {cfg.features.bank_root}")
+    _emit_config_line(f"[Config] Feature registry -> {cfg.features.registry_path}")
+    _emit_config_line(f"[Config] Local bank root -> {cfg.features.get('local_bank_root')}")
+    _emit_config_line(f"[Config] Experiment tag -> {cfg.experiment.tag}")

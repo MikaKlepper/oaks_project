@@ -1,14 +1,13 @@
 # pipeline/probes.py
 import logging
 import math
-from os import path
 from pathlib import Path
 from dataclasses import dataclass
 
 import numpy as np
 import joblib
 import torch
-from torch import nn, optim, topk
+from torch import nn, optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -17,7 +16,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
 from sklearn.decomposition import IncrementalPCA
-from sklearn.cluster import MiniBatchKMeans
 
 from torchmil.models import ABMIL
 from torchmil.models import CLAM_SB as CLAM
@@ -46,17 +44,32 @@ def seed_worker(worker_id):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
-def apply_pca(tiles, pca, device):
-    """
-    Apply PCA transform to tile embeddings.
-    """
-    if pca is None:
-        return tiles
-
-    tiles_np = tiles.cpu().numpy()
-    tiles_np = pca.transform(tiles_np)
-
-    return torch.from_numpy(tiles_np).to(device)
+def make_loader(
+    dataset,
+    *,
+    batch_size: int,
+    collate_fn=None,
+    shuffle: bool = False,
+    num_workers: int = 0,
+    generator=None,
+    worker_init_fn=None,
+    prefetch_factor: int | None = None,
+):
+    use_workers = num_workers > 0
+    kwargs = dict(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=collate_fn,
+        num_workers=num_workers,
+        pin_memory=use_workers,
+        persistent_workers=use_workers,
+        generator=generator,
+        worker_init_fn=worker_init_fn if use_workers else None,
+    )
+    if use_workers and prefetch_factor is not None:
+        kwargs["prefetch_factor"] = prefetch_factor
+    return DataLoader(**kwargs)
 
 
 class BaseProbe:
@@ -202,22 +215,33 @@ class TorchProbe(BaseProbe):
         logits = self.model(feats)
         return logits, labels
 
+    def _make_loader(
+        self,
+        dataset,
+        *,
+        collate_fn=None,
+        shuffle: bool = False,
+        num_workers: int | None = None,
+        prefetch_factor: int | None = None,
+    ):
+        if num_workers is None:
+            num_workers = self.cfg.num_workers
+        return make_loader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            collate_fn=collate_fn,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            generator=self.generator,
+            worker_init_fn=seed_worker,
+            prefetch_factor=prefetch_factor,
+        )
+
     def fit(self, dataset, collate_fn=None):
         """
         Train the probe on the given dataset.
         """
-        num_workers = self.cfg.num_workers
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            shuffle=True,
-            collate_fn=collate_fn,
-            num_workers=num_workers,
-            pin_memory=True if num_workers > 0 else False,
-            persistent_workers=True if num_workers > 0 else False,
-            generator=self.generator,
-            worker_init_fn=seed_worker if num_workers > 0 else None,
-        )
+        loader = self._make_loader(dataset, collate_fn=collate_fn, shuffle=True)
 
         scheduler = self._build_scheduler(len(loader))
         best_loss = float("inf")
@@ -236,7 +260,7 @@ class TorchProbe(BaseProbe):
             )
 
             for batch in pbar:
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad(set_to_none=True)
                 logits, labels = self.forward_batch(batch)
                 loss = self.criterion(logits, labels)
                 loss.backward()
@@ -277,22 +301,12 @@ class TorchProbe(BaseProbe):
         """
         Predict class labels for the given dataset.
         """
-        num_workers = self.cfg.num_workers
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            collate_fn=collate_fn,
-            num_workers=num_workers,
-            pin_memory=True if num_workers > 0 else False,
-            persistent_workers=True if num_workers > 0 else False,
-            generator=self.generator,
-            worker_init_fn=seed_worker if num_workers > 0 else None,
-        )
+        loader = self._make_loader(dataset, collate_fn=collate_fn, shuffle=False)
 
         self.model.eval()
         preds = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             pbar = tqdm(loader, desc="Predict", ncols=120)
             for batch in pbar:
                 logits, _ = self.forward_batch(batch)
@@ -304,22 +318,12 @@ class TorchProbe(BaseProbe):
         """
         Predict class probabilities for the given dataset.
         """
-        num_workers = self.cfg.num_workers
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            collate_fn=collate_fn,
-            num_workers=num_workers,
-            pin_memory=True if num_workers > 0 else False,
-            persistent_workers=True if num_workers > 0 else False,
-            generator=self.generator,
-            worker_init_fn=seed_worker if num_workers > 0 else None,
-        )
+        loader = self._make_loader(dataset, collate_fn=collate_fn, shuffle=False)
 
         self.model.eval()
         probs = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             pbar = tqdm(loader, desc="Predict Proba", ncols=120)
             for batch in pbar:
                 logits, _ = self.forward_batch(batch)
@@ -507,49 +511,23 @@ class FlowProbe(TorchProbe):
 
         slide_ids = torch.arange(B, device=X.device).repeat_interleave(N)
         slide_ids = slide_ids[mask_flat]
+        order = torch.argsort(slide_ids)
+        sorted_ids = slide_ids[order]
+        sorted_scores = scores[order]
+        counts = torch.bincount(sorted_ids, minlength=B)
 
         slide_scores = []
-
-        # for b in range(B):
-        #     s = scores[slide_ids == b]
-
-        #     if s.numel() == 0:
-        #         slide_scores.append(torch.tensor(0.0, device=X.device))
-        #         continue
-        #     # remove noise
-        #     k = max(1, int(self.topk_frac * s.shape[0]))
-        #     topk_vals = s.topk(k).values
-        #     # stabalize by subtracting mean of top-k
-        #     topk_vals = topk_vals - topk_vals.max()
-        #     # softmax
-        #     weights = torch.softmax(topk_vals / 10, dim=0)
-        #     # weighted average of top-k
-        #     score = (topk_vals * weights).sum()
-        #     slide_scores.append(score)
-            
-        #     # k = max(1, int(self.topk_frac * s.shape[0]))
-        #     # slide_scores.append(s.topk(k).values.mean())
-        #     # slide_scores.append(s.mean())
-
-        # return torch.stack(slide_scores)
-        # slide_scores = []
-
-
-
+        start = 0
         for b in range(B):
-            s = scores[slide_ids == b]
-
-            if s.numel() == 0:
+            c = int(counts[b].item())
+            if c == 0:
                 slide_scores.append(torch.tensor(0.0, device=X.device))
                 continue
-
-            k = max(1, int(self.topk_frac * s.shape[0]))
+            s = sorted_scores[start:start + c]
+            start += c
+            k = max(1, int(self.topk_frac * c))
             topk_vals = s.topk(k).values
-
-            # score = topk_vals.mean()
-            score = torch.quantile(topk_vals, 0.8)
-
-            slide_scores.append(score)
+            slide_scores.append(torch.quantile(topk_vals, 0.8))
 
         return torch.stack(slide_scores)
 
@@ -562,13 +540,11 @@ class FlowProbe(TorchProbe):
 
         print("[FlowProbe] Fitting PCA...")
 
-        loader = DataLoader(
+        loader = self._make_loader(
             dataset,
-            batch_size=self.cfg.batch_size,
-            shuffle=True,
             collate_fn=collate_fn,
-            num_workers=0,        # IMPORTANT
-            pin_memory=False,     # IMPORTANT
+            shuffle=True,
+            num_workers=0,
         )
 
         collected = 0
@@ -609,20 +585,9 @@ class FlowProbe(TorchProbe):
         if self.pca is not None:
             self._fit_pca(dataset, collate_fn)
 
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            shuffle=True,
-            collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
-            pin_memory=True,
-            persistent_workers=True,
-            generator=self.generator,
-            worker_init_fn=seed_worker,
-        )
+        loader = self._make_loader(dataset, collate_fn=collate_fn, shuffle=True)
 
-        # ✅ COMPATIBLE AMP (your PyTorch version)
-        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
         best_loss = float("inf")
         best_state = None
@@ -653,7 +618,7 @@ class FlowProbe(TorchProbe):
 
                 self.optimizer.zero_grad(set_to_none=True)
 
-                with torch.cuda.amp.autocast(enabled=self.use_amp):
+                with torch.amp.autocast("cuda", enabled=self.use_amp):
                     loss = self.model.forward_kld(tiles)
 
                 scaler.scale(loss).backward()
@@ -695,22 +660,15 @@ class FlowProbe(TorchProbe):
         if self._pred_cache is not None and self._pred_cache["key"] == key:
             return self._pred_cache["scores"]
 
-        loader = DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            collate_fn=collate_fn,
-            num_workers=self.cfg.num_workers,
-            pin_memory=True,
-            persistent_workers=True,
-        )
+        loader = self._make_loader(dataset, collate_fn=collate_fn, shuffle=False)
 
         self.model.eval()
         all_scores = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for X, mask, _ in tqdm(loader, desc="Inference", ncols=120):
-                X = X.to(self.device)
-                mask = mask.to(self.device)
+                X = X.to(self.device, non_blocking=True)
+                mask = mask.to(self.device, non_blocking=True)
 
                 slide_scores = self._aggregate_slide(X, mask)
                 all_scores.append(slide_scores.cpu())
@@ -803,21 +761,13 @@ class MILTorchProbe(TorchProbe):
         else:
             num_workers = 0
 
-        dl_kwargs = dict(
-            dataset=dataset,
-            batch_size=self.cfg.batch_size,
-            shuffle=True,
+        loader = self._make_loader(
+            dataset,
             collate_fn=collate_fn,
+            shuffle=True,
             num_workers=num_workers,
-            pin_memory=True if num_workers > 0 else False,
-            persistent_workers=True if num_workers > 0 else False,
-            generator=self.generator,
-            worker_init_fn=seed_worker if num_workers > 0 else None,
+            prefetch_factor=2 if num_workers > 0 else None,
         )
-        if num_workers > 0:
-            dl_kwargs["prefetch_factor"] = 2
-
-        loader = DataLoader(**dl_kwargs)
 
         scheduler = self._build_scheduler(len(loader))
         best_loss = float("inf")
@@ -841,7 +791,7 @@ class MILTorchProbe(TorchProbe):
                 mask = mask.to(self.cfg.device, non_blocking=True)
                 labels = labels.to(self.cfg.device, non_blocking=True).float()
 
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad(set_to_none=True)
 
                 _, loss_dict = self.model.compute_loss(labels, X, mask)
                 loss = loss_dict["BCEWithLogitsLoss"]
@@ -889,25 +839,18 @@ class MILTorchProbe(TorchProbe):
             return self._pred_cache["logits"]
 
         num_workers = self.cfg.num_workers
-        dl_kwargs = dict(
-            dataset=dataset,
-            batch_size=self.cfg.batch_size,
+        loader = self._make_loader(
+            dataset,
             collate_fn=collate_fn,
+            shuffle=False,
             num_workers=num_workers,
-            pin_memory=True if num_workers > 0 else False,
-            persistent_workers=True if num_workers > 0 else False,
-            generator=self.generator,
-            worker_init_fn=seed_worker if num_workers > 0 else None,
+            prefetch_factor=2 if num_workers > 0 else None,
         )
-        if num_workers > 0:
-            dl_kwargs["prefetch_factor"] = 2
-
-        loader = DataLoader(**dl_kwargs)
 
         self.model.eval()
         logits_list = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for X, mask, _ in loader:
                 X = X.to(self.cfg.device, non_blocking=True)
                 mask = mask.to(self.cfg.device, non_blocking=True)

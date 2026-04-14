@@ -1,6 +1,7 @@
 # Base configuration for the OAKS Toxicology Pipeline
 
-experiment_root: "outputs/MICCAI_final_experiments_benchmark_final/${datasets.name}/${data.target_task}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}/${experiment.tag}"
+#experiment_root: "outputs/MICCAI_final_experiments_benchmark_final/${datasets.name}/${data.target_task}/${aggregation.type}/${features.encoder}/${probe.type}/k${fewshot.k}/${experiment.tag}"
+experiment_root: "outputs/first_test/${data.target_task}/${datasets.name}/${features.encoder}/${aggregation.type}/${probe.type}/k${fewshot.k}/${experiment.tag}"
 
 data:
   project_root: "/data/temporary/mika/repos/oaks_project"
@@ -27,20 +28,14 @@ datasets:
   subset_fraction: null
 
 features:
-  # backend: "legacy"   # ["legacy", "feature_bank"]
+  # Feature-bank only pipeline (legacy feature backend removed)
   backend: "feature_bank"
   encoder: "H_OPTIMUS_1"
-  # features_root: "/data/temporary/toxicology"   # true base anchor
-  features_root: "/local/features"   # for using node mounted features on compute cluster
-  # bank_root: "feature_bank"
   bank_root: "/data/temporary/mika/repos/oaks_project/feature_bank"
-  # registry_path: null
-  registry_path: "/tmp/features.sqlite"
+  # registry_path: "/tmp/features.sqlite"  # node-local; can disappear across jobs/nodes
+  registry_path: "/data/temporary/mika/repos/oaks_project/feature_bank/registry/features.sqlite"
   local_bank_root: "/local/feature_bank"
   prefer_local_mirror: true
-
-  cache_root: "/data/temporary/mika/repos/oaks_project/pipeline/outputs/cache"
-  slide_dir: "/data/temporary/toxicology/TG-GATES/liver/Validations_FM/{encoder}/features"
 
   feature_type: "animal"   # ["animal", "slide"]
   use_cache: false

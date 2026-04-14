@@ -11,6 +11,7 @@ wsis/
 # Outputs and temporary files
 outputs/
 outputs_FM/
+jobs/
 
 # Python cache
 __pycache__/
@@ -21,3 +22,4 @@ __pycache__/
 *.pt
 
 feature_bank/
+jobs/

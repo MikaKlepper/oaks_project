@@ -20,7 +20,7 @@ def norm(x):
     return s or "0"
 
 
-def load_ids(csv_path):
+def load_ids(csv_path, *, preferred_col: str | None = None):
     """
     Load a set of slide IDs from a CSV file.
 
@@ -43,7 +43,9 @@ def load_ids(csv_path):
         return set()
 
     df = pd.read_csv(csv_path)
-    if "slide_id" in df.columns:
+    if preferred_col and preferred_col in df.columns:
+        col = preferred_col
+    elif "slide_id" in df.columns:
         col = "slide_id"
     elif "subject_organ_UID" in df.columns:
         col = "subject_organ_UID"
@@ -60,35 +62,9 @@ def load_ids(csv_path):
     return {norm(x) for x in df[col].astype(str)}
 
 
-def feature_ids(feature_dir):
-    """
-    Returns a set of normalized slide IDs found in the feature directory.
-
-    Parameters
-    ----------
-    feature_dir : str or Path
-        The path to the feature directory.
-
-    Returns
-    -------
-    set of str
-        A set of normalized slide IDs found in the feature directory.
-    """
-    feature_dir = Path(feature_dir)
-    if not feature_dir.exists():
-        print(f"[ERROR] Missing feature dir: {feature_dir}")
-        return set()
-    return {norm(p.stem) for p in feature_dir.glob("*.pt")}
-
-
 def check_subset_consistency(prepared):
     """
-    Checks the consistency of a subset of IDs against the full dataset.
-
-    This function checks three things:
-    1. Metadata consistency: checks if the subset IDs are present in the metadata.
-    2. Feature files present: checks if feature files are present for all subset IDs.
-    3. Subset / split leakage: checks if the subset IDs are present in any other split (train, val, test).
+    Check metadata consistency, feature-bank coverage, and split leakage.
 
     Parameters
     ----------
@@ -102,8 +78,6 @@ def check_subset_consistency(prepared):
                         The type of feature (slide or animal)
                     - split : str
                         The split to check (train, val, test)
-                    - features_dir : str or Path
-                        The directory containing the feature files
                     - ids : set of str
                         The subset of IDs to check
                     - subset_csv : str or Path or None
@@ -147,18 +121,19 @@ def check_subset_consistency(prepared):
     else:
         print("[OK] Metadata consistency check passed")
 
-    # check if feature files are present
-    if data.get("feature_backend") == "feature_bank":
-        artifact_map = data.get("feature_artifacts") or data.get("raw_feature_artifacts") or {}
-        feats = {norm(k) for k in artifact_map.keys()}
-    else:
-        feats = feature_ids(data["features_dir"])
+    # feature-bank availability check
+    feature_map = (
+        data.get("feature_entries")
+        or data.get("raw_feature_entries")
+        or {}
+    )
+    feats = {norm(k) for k in feature_map.keys()}
     missing = dataset_ids - feats
 
-    print(f"[INFO] Found {len(feats)} feature vectors")
+    print(f"[INFO] Found {len(feats)} feature entries")
 
     if missing:
-        print(f"[ERROR] {len(missing)} missing feature files")
+        print(f"[ERROR] {len(missing)} missing feature entries")
         print(list(missing)[:10])
     else:
         print("[OK] Feature files check passed")
@@ -170,10 +145,10 @@ def check_subset_consistency(prepared):
         print("\n========== CHECK COMPLETE ==========\n")
         return
 
-    subset_ids = load_ids(subset_csv)
-    train_ids  = load_ids(data.get("train_csv"))
-    val_ids    = load_ids(data.get("val_csv"))
-    test_ids   = load_ids(data.get("test_csv"))
+    subset_ids = load_ids(subset_csv, preferred_col=meta_col)
+    train_ids  = load_ids(data.get("train_csv"), preferred_col=meta_col)
+    val_ids    = load_ids(data.get("val_csv"), preferred_col=meta_col)
+    test_ids   = load_ids(data.get("test_csv"), preferred_col=meta_col)
 
     expected = {
         "train": train_ids,

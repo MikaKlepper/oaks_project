@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=6
+#SBATCH --gpus-per-task=4
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=40G
 #SBATCH --time=7-00:00:00
@@ -19,7 +19,7 @@ CONFIG_PATH="$REPO_DIR/yaml_configs/liver_h_optimus_1_part3.yaml"
 
 SCRATCH_BASE="/scratch_mikaklepper_tg_gates"
 SCRATCH_OUTPUT_DIR="$SCRATCH_BASE/outputs/H_OPTIMUS_1"
-FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/Missing_slides_FM/features_part_3/H_OPTIMUS_1"
+FINAL_OUTPUT_DIR="/data/temporary/toxicology/TG-GATES/Missing_slides_FM/features_part_missing_slide/H_OPTIMUS_1"
 
 echo "Creating required directories..."
 mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
@@ -28,11 +28,7 @@ mkdir -p "$SCRATCH_BASE" "$SCRATCH_OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
 # HuggingFace cache on scratch
 # --------------------------------------------------
 
-export HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}"
-if [ -z "$HF_TOKEN" ]; then
-  echo "HF_TOKEN is not set. Export HF_TOKEN or HUGGINGFACE_HUB_TOKEN before running."
-  exit 1
-fi
+export HF_TOKEN="${HF_TOKEN:-}"
 
 export HOME="$SCRATCH_BASE"
 export HF_HOME="$SCRATCH_BASE/hf_cache"

@@ -150,6 +150,48 @@ def summarize_three_splits(counter_train, counter_val, counter_test, output_path
     print(f"[Splitting] Summary saved to: {output_path}")
 
 
+def generate_abnormality_splits(metadata_csv, organ, output_dir, num_repeats=1000):
+    """
+    Generate train/val/test splits for abnormality classification and save them.
+    """
+    output_dir = str(output_dir)
+    df = pd.read_csv(metadata_csv)
+
+    labels_by_drug, _ = group_labels_per_compound(df, organ)
+
+    (
+        _train_val_drugs,
+        test_drugs,
+        train_val_groups,
+        _test_groups,
+        _counter_train_val,
+        counter_test,
+    ) = repeat_partitions(labels_by_drug, num_repeats=num_repeats)
+    (
+        train_drugs,
+        val_drugs,
+        _train_groups,
+        _val_groups,
+        counter_train,
+        counter_val,
+    ) = repeat_partitions(train_val_groups, num_repeats=num_repeats)
+
+    prepare_splits_files(
+        df,
+        organ,
+        train_drugs,
+        val_drugs,
+        test_drugs,
+        output_dir=output_dir,
+    )
+    summarize_three_splits(
+        counter_train,
+        counter_val,
+        counter_test,
+        os.path.join(output_dir, "summary.csv"),
+    )
+
+
 def main(config_path="configs/base_config.yaml"):
     """
     Main entry point.
@@ -157,38 +199,11 @@ def main(config_path="configs/base_config.yaml"):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    df = pd.read_csv(config["data"]["metadata_csv"])
-
-    labels_by_drug, _ = group_labels_per_compound(
-        df, config["data"]["organ"]
-    )
-
-    # Split 1
-    train_val_drugs, test_drugs, train_val_groups, test_groups, counter_train_val, counter_test = repeat_partitions(
-        labels_by_drug,
-        num_repeats=config["splitting"]["num_repeats"]
-    )
-
-    # Split 2
-    train_drugs, val_drugs, train_groups, val_groups, counter_train, counter_val = repeat_partitions(
-        train_val_groups,
-        num_repeats=config["splitting"]["num_repeats"]
-    )
-
-    train_df, val_df, test_df = prepare_splits_files(
-        df,
+    generate_abnormality_splits(
+        config["data"]["metadata_csv"],
         config["data"]["organ"],
-        train_drugs,
-        val_drugs,
-        test_drugs,
-        output_dir=config["data"]["splits_dir"]
-    )
-
-    summarize_three_splits(
-        counter_train,
-        counter_val,
-        counter_test,
-        config["splitting"]["summary_csv"]
+        config["data"]["splits_dir"],
+        num_repeats=config["splitting"]["num_repeats"],
     )
 
 def find_missing_feature_slides(metadata_df, organ, encoder="H_OPTIMUS_1"):
@@ -264,10 +279,4 @@ def find_missing_feature_slides(metadata_df, organ, encoder="H_OPTIMUS_1"):
     return missing_df
 
 if __name__ == "__main__":
-    # main()
-    config_path = "configs/base_config.yaml"
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-    metadata_df = pd.read_csv(config["data"]["metadata_csv"])
-    find_missing_feature_slides(metadata_df, config["data"]["organ"], encoder="H_OPTIMUS_1")
-    
+    main()

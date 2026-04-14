@@ -8,10 +8,6 @@ from utils.feature_bank_registry import FeatureBankRegistry
 MIL_PROBES = {"abmil", "clam", "dsmil", "flow"}
 
 
-def feature_bank_enabled(cfg) -> bool:
-    return str(getattr(cfg.features, "backend", "legacy")).lower() == "feature_bank"
-
-
 def build_registry_from_cfg(cfg) -> FeatureBankRegistry:
     shared_root = Path(getattr(cfg.features, "bank_root", "feature_bank"))
     registry_path = Path(
@@ -31,27 +27,58 @@ def build_registry_from_cfg(cfg) -> FeatureBankRegistry:
     )
 
 
-def resolve_prepared_feature_bank(cfg, df) -> dict:
-    registry = build_registry_from_cfg(cfg)
-    probe_type = str(cfg.probe.type).lower()
-    dataset = str(cfg.datasets.name).lower()
-    encoder = str(cfg.features.encoder).upper()
-    feature_type = str(cfg.features.feature_type).lower()
-
-    result = {
+def _base_feature_bank_info(registry: FeatureBankRegistry) -> dict:
+    return {
         "feature_backend": "feature_bank",
         "feature_bank_root": str(registry.shared_bank_root),
         "feature_bank_local_root": (
             str(registry.local_bank_root) if registry.local_bank_root else None
         ),
         "feature_registry_path": str(registry.db_path),
-        "raw_feature_artifacts": None,
-        "feature_artifacts": None,
+        "active_feature_entries": {},
+        "missing_required_ids": [],
+        "feature_entry_mode": None,
+        "raw_feature_entries": None,
+        "feature_entries": None,
+        "missing_raw_feature_ids": [],
+        "missing_feature_ids": [],
     }
+
+
+def _set_raw_entries(feature_bank_info: dict, entries: dict, missing_ids: list[str]) -> dict:
+    feature_bank_info["active_feature_entries"] = entries
+    feature_bank_info["missing_required_ids"] = missing_ids
+    feature_bank_info["feature_entry_mode"] = "raw"
+    feature_bank_info["raw_feature_entries"] = entries
+    feature_bank_info["missing_raw_feature_ids"] = missing_ids
+    return feature_bank_info
+
+
+def _set_derived_entries(feature_bank_info: dict, entries: dict, missing_ids: list[str]) -> dict:
+    feature_bank_info["active_feature_entries"] = entries
+    feature_bank_info["missing_required_ids"] = missing_ids
+    feature_bank_info["feature_entry_mode"] = "derived"
+    feature_bank_info["feature_entries"] = entries
+    feature_bank_info["missing_feature_ids"] = missing_ids
+    return feature_bank_info
+
+
+def resolve_prepared_feature_bank(cfg, df) -> dict:
+    registry = build_registry_from_cfg(cfg)
+    probe_type = str(cfg.probe.type).lower()
+    dataset = str(
+        cfg.datasets.get("train_name", cfg.datasets.name)
+        if cfg.calibration.enabled and str(cfg.datasets.split).lower() == "train"
+        else cfg.datasets.name
+    ).lower()
+    encoder = str(cfg.features.encoder).upper()
+    feature_type = str(cfg.features.feature_type).lower()
+
+    feature_bank_info = _base_feature_bank_info(registry)
 
     if probe_type in MIL_PROBES:
         slide_ids = sorted(set(df["slide_id"].astype(str).tolist()))
-        artifacts = registry.resolve_artifacts(
+        entries = registry.resolve_feature_entries(
             dataset=dataset,
             encoder=encoder,
             sample_type="slide",
@@ -59,21 +86,15 @@ def resolve_prepared_feature_bank(cfg, df) -> dict:
             storage_kind="raw",
             aggregation="none",
         )
-        missing = sorted(set(slide_ids) - set(artifacts.keys()))
-        if missing:
-            raise FileNotFoundError(
-                f"Feature bank is missing {len(missing)} raw slide artifacts for "
-                f"dataset={dataset}, encoder={encoder}. First missing: {missing[:10]}"
-            )
-        result["raw_feature_artifacts"] = artifacts
-        return result
+        missing = sorted(set(slide_ids) - set(entries.keys()))
+        return _set_raw_entries(feature_bank_info, entries, missing)
 
     sample_ids = (
         df["subject_organ_UID"].astype(str).tolist()
         if feature_type == "animal"
         else df["slide_id"].astype(str).tolist()
     )
-    artifacts = registry.resolve_artifacts(
+    entries = registry.resolve_feature_entries(
         dataset=dataset,
         encoder=encoder,
         sample_type=feature_type,
@@ -81,13 +102,5 @@ def resolve_prepared_feature_bank(cfg, df) -> dict:
         storage_kind="derived",
         aggregation=str(cfg.aggregation.type).lower(),
     )
-    missing = sorted(set(map(str, sample_ids)) - set(artifacts.keys()))
-    if missing:
-        raise FileNotFoundError(
-            f"Feature bank is missing {len(missing)} derived artifacts for "
-            f"dataset={dataset}, encoder={encoder}, sample_type={feature_type}, "
-            f"aggregation={str(cfg.aggregation.type).lower()}. "
-            f"First missing: {missing[:10]}"
-        )
-    result["feature_artifacts"] = artifacts
-    return result
+    missing = sorted(set(map(str, sample_ids)) - set(entries.keys()))
+    return _set_derived_entries(feature_bank_info, entries, missing)

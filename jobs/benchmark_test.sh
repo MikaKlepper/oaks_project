@@ -13,6 +13,7 @@
 
 pip3 install seaborn
 pip3 install torchmil
+pip3 install normflows
 
 echo "============================"
 echo "   STARTING BENCHMARK RUN   "

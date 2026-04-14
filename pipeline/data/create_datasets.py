@@ -1,6 +1,5 @@
 import torch
 from torch.utils.data import Dataset
-from pathlib import Path
 import h5py
 import numpy as np
 
@@ -25,10 +24,7 @@ class ToxicologyDataset(Dataset):
         if len(self.ids) != len(self.labels):
             raise ValueError("IDs and labels length mismatch")
 
-        # features_dir should already be set to either slide_dir or animal_dir in prepare_dataset_inputs()
-        self.features_dir = Path(data["features_dir"])
-        self.feature_backend = data.get("feature_backend", "legacy")
-        self.feature_artifacts = data.get("feature_artifacts") or {}
+        self.feature_entries = data.get("feature_entries") or {}
         self._h5_files = {}
 
         self.embed_dim = int(data["embed_dim"])
@@ -38,33 +34,25 @@ class ToxicologyDataset(Dataset):
         return len(self.ids)
 
     def __getitem__(self, idx):
-        _id = self.ids[idx]
-        if self.feature_backend == "feature_bank":
-            artifact = self.feature_artifacts.get(str(_id))
-            if artifact is None:
-                raise FileNotFoundError(f"Missing feature artifact for {_id}")
-            h5_path = artifact["resolved_hdf5_path"]
-            h5_file = self._h5_files.get(h5_path)
-            if h5_file is None:
-                h5_file = h5py.File(h5_path, "r")
-                self._h5_files[h5_path] = h5_file
-            x = torch.from_numpy(
-                np.asarray(h5_file[artifact["hdf5_key"]])
-            ).to(self.dtype)
-        else:
-            path = self.features_dir / f"{_id}.pt"
+        sample_id = self.ids[idx]
+        entry = self.feature_entries.get(str(sample_id))
+        if entry is None:
+            raise FileNotFoundError(f"Missing feature registry entry for {sample_id}")
 
-            if not path.exists():
-                raise FileNotFoundError(f"Missing feature file: {path}")
+        h5_path = entry["resolved_hdf5_path"]
+        h5_file = self._h5_files.get(h5_path)
+        if h5_file is None:
+            h5_file = h5py.File(h5_path, "r")
+            self._h5_files[h5_path] = h5_file
 
-            x = torch.load(path, map_location="cpu").to(self.dtype)
+        x = torch.from_numpy(np.asarray(h5_file[entry["hdf5_key"]])).to(self.dtype)
 
         if x.ndim > 1:
             x = x.flatten()
 
         if x.numel() != self.embed_dim:
             raise ValueError(
-                f"Feature {_id} has shape {tuple(x.shape)}, expected ({self.embed_dim},)"
+                f"Feature {sample_id} has shape {tuple(x.shape)}, expected ({self.embed_dim},)"
             )
 
         y = torch.tensor(self.labels[idx], dtype=torch.long)
