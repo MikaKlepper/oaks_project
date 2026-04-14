@@ -66,29 +66,31 @@ Configure paths in `configs/base_config.yaml`:
 
 ---
 
-## Dataset Selection Logic
+## Dataset Selection Logic (Plain Language)
 
 Dataset selection is explicit and reproducible:
 
-- `--dataset tggates` → internal training / validation / testing
-- `--dataset ucb` → external OOD testing only
+- `--dataset tggates` means: train/validate/test on TG-GATES splits.
+- `--dataset ucb` means: evaluate on UCB only (test stage).
+- Calibration always **samples from UCB** and **fine-tunes the TG-GATES-trained probe**.
 
-UCB is a **test-only** dataset and cannot be used for `stage=train` or `stage=eval`,
-but can be used as a **calibration source**.
+Short version:
+- TG-GATES is the training backbone.
+- UCB is the external OOD dataset (test + calibration only).
 
 ---
 
-## Pipeline Stages
+## Pipeline Stages (What Actually Happens)
 
 ### Training (stage=train)
-- Uses TG-GATES
-- Uses full training split, few-shot subsets, or an explicit training subset CSV
-- If calibration is enabled, the **calibration train subset** is drawn from UCB
+- Uses TG-GATES **by default**
+- Uses full training split, a few-shot subset, or an explicit `--subset_csv`
+- If calibration is enabled, the calibration **train subset is drawn from UCB**
 
 ### Validation (stage=eval)
 - Uses TG-GATES
 - Liver hypertrophy defaults to `TG-GATES/Splits/val.csv`
-- Any abnormality uses the resolved `Splits/latest/val.csv`
+- Any abnormality uses `Splits/latest/val.csv`
 
 ### Testing (stage=test)
 - Uses the configured dataset and subset CSV
@@ -96,9 +98,15 @@ but can be used as a **calibration source**.
 - UCB: external OOD test split (`ucb_test.csv`)
 - Loads TG-GATES-trained weights and evaluates without retraining
 
+### Calibration (when `--calibrate` is enabled)
+- Train base model on TG-GATES (k-shot or full training split)
+- Sample N **UCB** cases for calibration
+- Warm-start from base checkpoint and fine-tune on that UCB subset
+- Evaluate on TG-GATES val/test (or UCB test if dataset is UCB)
+
 ---
 
-## Running the Pipeline
+## Running the Pipeline (Quick Start)
 
 Move into the pipeline directory:
 
@@ -132,6 +140,40 @@ python main.py \
   --stage test \
   --test_subset_csv splitting_data/UCB/Subsets/ucb_test.csv
 
+## Common Recipes (Copy/Paste)
+
+Train on TG-GATES (full train) + validate:
+
+python main.py \
+  --config configs/base_config.yaml \
+  --dataset tggates \
+  --model H_OPTIMUS_1 \
+  --probe linear \
+  --stage all
+
+Train on TG-GATES (k-shot) + validate:
+
+python main.py \
+  --config configs/base_config.yaml \
+  --dataset tggates \
+  --model H_OPTIMUS_1 \
+  --probe linear \
+  --k 100 \
+  --stage all
+
+Calibrate on UCB after TG-GATES training:
+
+python main.py \
+  --config configs/base_config.yaml \
+  --dataset tggates \
+  --model H_OPTIMUS_1 \
+  --probe linear \
+  --k 100 \
+  --calibrate \
+  --calibration_samples 25 \
+  --calibration_seed 42 \
+  --stage all
+
 ---
 
 ## Pipeline Flow (Diagram)
@@ -143,16 +185,24 @@ flowchart TD
   C --> D[split_resolver.py]
   C --> E[prepare_dataset.py]
   E --> F[feature_bank_resolver.py]
-  B --> G[train.py]
-  B --> H[eval.py]
-  H --> I[log_benchmark.py]
-  I --> J[plot_benchmarks.py]
 
   D -->|calibration ON| D1[UCB calibration subset]
-  D -->|calibration OFF| D2[TG-GATES splits]
+  D -->|calibration OFF| D2[TG-GATES / latest splits]
+  D -->|few-shot k| D3[k-subset CSVs]
 
-  G --> G1[checkpoint]
+  B --> G[train.py]
+  G --> G1[checkpoint saved]
+  G1 --> H[eval.py]
+
   H --> H1[metrics + outputs]
+  H1 --> I[log_benchmark.py]
+  I --> J[plot_benchmarks.py]
+
+  H -->|validation| V[outputs/.../validation/]
+  H -->|testing| T[outputs/.../testing/<dataset>/]
+  I --> VB[outputs/validation/<dataset>/*.csv]
+  I --> TB[outputs/testing/<dataset>/*.csv]
+  G1 --> CKPT[train/probe_<probe>.pt|joblib]
 ```
 
 ---
@@ -173,7 +223,7 @@ This will:
 
 ---
 
-## Outputs
+## Outputs (Where Things Land)
 
 Outputs are written under the experiment root defined in the config, e.g.:
 

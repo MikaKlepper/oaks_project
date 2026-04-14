@@ -15,19 +15,21 @@ flowchart TD
   I --> J[plot_benchmarks.py]
 
   D -->|calibration ON| D1[UCB calibration subset]
-  D -->|calibration OFF| D2[TG-GATES splits]
+  D -->|calibration OFF| D2[TG-GATES / latest splits]
+  D -->|few-shot k| D3[k-subset CSVs]
 
-  G --> G1[checkpoint]
+  G --> G1[checkpoint saved]
   H --> H1[metrics + outputs]
+  G1 --> CKPT[train/probe_<probe>.pt|joblib]
 
-1) ENTRYPOINTS
---------------
+1) ENTRYPOINTS (What to Run)
+----------------------------
 - Single run: pipeline/main.py
 - Batch run: pipeline/benchmark.py
 
 
-2) CONFIG + RESOLUTION
-----------------------
+2) CONFIG + RESOLUTION (What Gets Decided)
+------------------------------------------
 main.py
   -> utils/config_loader.load_merged_config()
      - apply CLI overrides
@@ -118,6 +120,13 @@ feature_bank_resolver.py:
       calibration train -> UCB
       otherwise -> cfg.datasets.name
 
+
+QUICK REFERENCE (Plain Language)
+--------------------------------
+- TG-GATES: training backbone (train/val/test).
+- UCB: external OOD dataset (test + calibration only).
+- Calibration: sample N UCB cases, fine-tune from TG-GATES base.
+- Few-shot: use k-subset (existing for hypertrophy, generated for any_abnormality).
 
 NOTES
 -----
