@@ -20,7 +20,7 @@ flowchart TD
 
   G --> G1[checkpoint saved]
   H --> H1[metrics + outputs]
-  G1 --> CKPT[train/probe_<probe>.pt|joblib]
+  G1 --> CKPT[train/probe_<probe>.pt or joblib]
 
 1) ENTRYPOINTS (What to Run)
 ----------------------------

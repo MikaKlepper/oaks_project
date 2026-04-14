@@ -32,7 +32,7 @@ MIL_PROBES = {"abmil", "clam", "dsmil", "flow"}
 ENCODERS =["H_OPTIMUS_1"]  # for quick testing, focus on one encoder]
 TARGETS = ["liver_hypertrophy", "any_abnormality"]
 CALIBRATION_SAMPLES = [5, 10, 25, 50]
-CALIBRATION_ONLY = True
+CALIBRATION_ONLY = False
 
 # PROBES = [
 #     "linear",
@@ -46,7 +46,7 @@ CALIBRATION_ONLY = True
 #     "dsmil",
 #     "flow",
 # ]
-PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf", "flow"]
+PROBES = ["linear", "mlp", "logreg", "knn", "svm_linear", "svm_rbf", "flow", "abmil", "clam"]  # for quick testing, focus on one MIL probe
 
 # K_VALUES = [100, 80, 40, 20, 10, 5, 1]
 # K_VALUES = [2953]  # for quick testing, use all training samples for tggates

@@ -202,7 +202,7 @@ flowchart TD
   H -->|testing| T[outputs/.../testing/<dataset>/]
   I --> VB[outputs/validation/<dataset>/*.csv]
   I --> TB[outputs/testing/<dataset>/*.csv]
-  G1 --> CKPT[train/probe_<probe>.pt|joblib]
+  G1 --> CKPT[train/probe_<probe>.pt or joblib]
 ```
 
 ---
